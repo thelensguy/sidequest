@@ -1,8 +1,8 @@
-import { useState, type CSSProperties, type FormEvent } from 'react';
+import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { type ActiveTabInfo, captureFromTab, getActiveTab, isCompleteJob } from '../capture/capture';
 import type { ExtractedJob } from '../capture/adapters';
 import { addJobEntry, appendEvent } from '../lib/storage';
-import type { JobEntry, JobEntrySource } from '../lib/types';
+import type { AppEventType, JobEntry, JobEntrySource } from '../lib/types';
 
 type ViewState =
   | { phase: 'idle' }
@@ -15,13 +15,19 @@ const EMPTY_DRAFT: ExtractedJob = { company: '', role: '', url: '' };
 
 /**
  * Shared save path for both the automatic (adapter-matched) capture and
- * the manual-entry fallback: build a JobEntry, persist it, and log a
- * `capture` AppEvent against it. Per spec, the manual-entry path uses
- * this exact same call shape — only `source` differs ('manual' vs. the
- * matched adapter's source) — rather than a distinct `manual_add` event
- * type.
+ * the manual-entry fallback: build a JobEntry, persist it, and log an
+ * AppEvent against it. `source` on the JobEntry is 'manual' for both a
+ * dashboard backfill and a capture that fell through to the inline form,
+ * so `eventType` is what preserves that distinction on the event log:
+ * 'capture' when the popup's adapter pipeline produced the entry,
+ * 'manual_add' when the user typed it in by hand (matching the semantic
+ * the dashboard's own "Add entry" form already uses for manual_add).
  */
-async function saveEntry(fields: ExtractedJob, source: JobEntrySource): Promise<JobEntry> {
+async function saveEntry(
+  fields: ExtractedJob,
+  source: JobEntrySource,
+  eventType: AppEventType
+): Promise<JobEntry> {
   const now = new Date().toISOString();
   const entry: JobEntry = {
     id: crypto.randomUUID(),
@@ -36,7 +42,7 @@ async function saveEntry(fields: ExtractedJob, source: JobEntrySource): Promise<
   await addJobEntry(entry);
   await appendEvent({
     id: crypto.randomUUID(),
-    type: 'capture',
+    type: eventType,
     jobEntryId: entry.id,
     timestamp: now,
   });
@@ -47,7 +53,18 @@ export function Popup() {
   const [state, setState] = useState<ViewState>({ phase: 'idle' });
   const [draft, setDraft] = useState<ExtractedJob>(EMPTY_DRAFT);
 
+  // Synchronous re-entry guard for both save paths. A `disabled` prop on
+  // the button (or checking `state.phase` inside the handler) isn't
+  // enough on its own: React batches/defers setState, so a fast
+  // double-click can fire the handler twice before the first
+  // `setState({ phase: 'capturing' })` actually commits and re-renders
+  // the disabled button. A ref updates immediately, in the same tick, so
+  // it catches that race that state-based checks miss.
+  const isSavingRef = useRef(false);
+
   async function handleCapture() {
+    if (isSavingRef.current) return;
+    isSavingRef.current = true;
     setState({ phase: 'capturing' });
     try {
       const tab = await getActiveTab();
@@ -65,41 +82,52 @@ export function Popup() {
       };
 
       if (isCompleteJob(job)) {
-        const entry = await saveEntry(job, source);
+        const entry = await saveEntry(job, source, 'capture');
         setState({ phase: 'saved', entry });
+        // Stay locked: the primary button is hidden once phase is
+        // 'saved', and handleReset() clears the guard when the user
+        // moves on via "Capture another".
         return;
       }
 
       // Incomplete or failed extraction — prefill whatever we did get
       // (or the tab's own title/url as a last resort) and let the user
-      // fill in the rest by hand.
+      // fill in the rest by hand. Release the guard: the primary button
+      // is hidden while phase is 'manual' anyway, but the manual form's
+      // own submit uses this same ref.
       setDraft(fallbackDraft);
       setState({ phase: 'manual', tab });
+      isSavingRef.current = false;
     } catch (err) {
       setState({
         phase: 'error',
         message: err instanceof Error ? err.message : 'Something went wrong capturing this page.',
       });
+      isSavingRef.current = false;
     }
   }
 
   async function handleManualSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSavingRef.current) return;
     if (!draft.company.trim() || !draft.role.trim() || !draft.url.trim()) {
       return;
     }
+    isSavingRef.current = true;
     try {
-      const entry = await saveEntry(draft, 'manual');
+      const entry = await saveEntry(draft, 'manual', 'manual_add');
       setState({ phase: 'saved', entry });
     } catch (err) {
       setState({
         phase: 'error',
         message: err instanceof Error ? err.message : 'Something went wrong saving this entry.',
       });
+      isSavingRef.current = false;
     }
   }
 
   function handleReset() {
+    isSavingRef.current = false;
     setDraft(EMPTY_DRAFT);
     setState({ phase: 'idle' });
   }
@@ -108,7 +136,7 @@ export function Popup() {
     <div style={styles.container}>
       <h1 style={styles.heading}>SideQuest</h1>
 
-      {state.phase !== 'manual' && (
+      {state.phase !== 'manual' && state.phase !== 'saved' && (
         <button
           type="button"
           onClick={handleCapture}
