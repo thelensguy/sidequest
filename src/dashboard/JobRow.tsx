@@ -3,6 +3,7 @@ import { appendEvent, updateJobEntry } from '../lib/storage';
 import { generateId } from './id';
 import { isStale, daysSince } from './staleness';
 import { EditableField } from './EditableField';
+import { validateJobUrl } from './urlValidation';
 
 const STATUS_OPTIONS: ApplicationStatus[] = [
   'saved',
@@ -38,8 +39,20 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
   }
 
   async function handleFieldSave(field: 'company' | 'role' | 'url', next: string) {
+    let value = next;
+    if (field === 'url') {
+      const safeUrl = validateJobUrl(next);
+      if (safeUrl === null) {
+        // Same http(s)-only rule as the add/import paths — refuse to store
+        // (and later render as a clickable href) anything else.
+        window.alert('Link must be a valid http(s) URL, or left blank.');
+        return;
+      }
+      value = safeUrl;
+    }
+
     await updateJobEntry(entry.id, {
-      [field]: next,
+      [field]: value,
       lastUpdated: new Date().toISOString(),
     });
     onChanged();

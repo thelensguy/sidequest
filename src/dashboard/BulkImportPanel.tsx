@@ -11,24 +11,37 @@ export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
   const [errors, setErrors] = useState<ParseRowError[]>([]);
   const [importing, setImporting] = useState(false);
   const [lastImportedCount, setLastImportedCount] = useState<number | null>(null);
+  const [importFailure, setImportFailure] = useState<string | null>(null);
 
   async function handleImport() {
     const { rows, errors: parseErrors } = parseBulkImport(text);
     setErrors(parseErrors);
     setLastImportedCount(null);
+    setImportFailure(null);
 
     if (rows.length === 0) return;
 
     setImporting(true);
+    let succeeded = 0;
     try {
       // Sequential to keep each addJobEntry/appendEvent pair consistent
       // against the same read-modify-write storage layer.
       for (const row of rows) {
         await createJobEntry(row, 'import');
+        succeeded++;
       }
-      setLastImportedCount(rows.length);
+      setLastImportedCount(succeeded);
       setText('');
       onImported();
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      setImportFailure(
+        `Import stopped after a storage error: ${succeeded} of ${rows.length} row(s) were saved before it failed (${reason}).`
+      );
+      if (succeeded > 0) {
+        setLastImportedCount(succeeded);
+        onImported();
+      }
     } finally {
       setImporting(false);
     }
@@ -72,6 +85,7 @@ export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
           </ul>
         </div>
       )}
+      {importFailure && <div className="import-errors">{importFailure}</div>}
     </div>
   );
 }

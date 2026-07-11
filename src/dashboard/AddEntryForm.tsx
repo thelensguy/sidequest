@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { ApplicationStatus } from '../lib/types';
 import { createJobEntry } from './createEntry';
+import { todayLocalDateString, localDateOnlyToIso } from './dateUtils';
+import { validateJobUrl } from './urlValidation';
 
 const STATUS_OPTIONS: ApplicationStatus[] = [
   'saved',
@@ -9,10 +11,6 @@ const STATUS_OPTIONS: ApplicationStatus[] = [
   'rejected',
   'offer',
 ];
-
-function todayIsoDate(): string {
-  return new Date().toISOString().slice(0, 10);
-}
 
 interface AddEntryFormProps {
   onAdded: () => void;
@@ -23,7 +21,7 @@ export function AddEntryForm({ onAdded }: AddEntryFormProps) {
   const [role, setRole] = useState('');
   const [url, setUrl] = useState('');
   const [status, setStatus] = useState<ApplicationStatus>('saved');
-  const [date, setDate] = useState(todayIsoDate());
+  const [date, setDate] = useState(todayLocalDateString());
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -36,9 +34,15 @@ export function AddEntryForm({ onAdded }: AddEntryFormProps) {
       return;
     }
 
-    const dateAdded = date ? new Date(date).toISOString() : new Date().toISOString();
-    if (Number.isNaN(new Date(dateAdded).getTime())) {
+    const dateAdded = localDateOnlyToIso(date || todayLocalDateString());
+    if (!dateAdded) {
       setError('Date added is invalid.');
+      return;
+    }
+
+    const safeUrl = validateJobUrl(url);
+    if (safeUrl === null) {
+      setError('Link must be a valid http(s) URL, or left blank.');
       return;
     }
 
@@ -48,7 +52,7 @@ export function AddEntryForm({ onAdded }: AddEntryFormProps) {
         {
           company: company.trim(),
           role: role.trim(),
-          url: url.trim(),
+          url: safeUrl,
           status,
           dateAdded,
         },
@@ -58,7 +62,7 @@ export function AddEntryForm({ onAdded }: AddEntryFormProps) {
       setRole('');
       setUrl('');
       setStatus('saved');
-      setDate(todayIsoDate());
+      setDate(todayLocalDateString());
       onAdded();
     } finally {
       setSubmitting(false);

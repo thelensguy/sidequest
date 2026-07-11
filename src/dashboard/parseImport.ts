@@ -1,5 +1,7 @@
 import type { ApplicationStatus } from '../lib/types';
 import type { NewJobEntryInput } from './createEntry';
+import { localDateOnlyToIso } from './dateUtils';
+import { validateJobUrl } from './urlValidation';
 
 const STATUS_VALUES: ApplicationStatus[] = [
   'saved',
@@ -22,6 +24,16 @@ function normalizeDate(raw: string): string | null {
     // Missing date is fine — default to "now" rather than rejecting the row.
     return new Date().toISOString();
   }
+
+  // Strict "YYYY-MM-DD" (the common spreadsheet-export shape, and what our
+  // own date input produces) must be parsed as LOCAL midnight — never via
+  // `new Date(dateOnlyString)`, which the spec parses as UTC midnight and
+  // then shifts a day early once displayed in a US timezone.
+  const isoDateOnly = localDateOnlyToIso(trimmed);
+  if (isoDateOnly) return isoDateOnly;
+
+  // Fall back to generic parsing for other formats (e.g. "6/1/2026"),
+  // which browsers parse as local time rather than UTC.
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
@@ -87,10 +99,20 @@ export function parseBulkImport(text: string): ParseImportResult {
       return;
     }
 
+    const safeUrl = validateJobUrl(url ?? '');
+    if (safeUrl === null) {
+      errors.push({
+        line: lineNumber,
+        raw: line,
+        message: `Unsafe or invalid URL "${url}" — only http(s) links are allowed`,
+      });
+      return;
+    }
+
     rows.push({
       company,
       role,
-      url: url ?? '',
+      url: safeUrl,
       status,
       dateAdded,
     });
