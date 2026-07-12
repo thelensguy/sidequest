@@ -1,24 +1,10 @@
 import type { ApplicationStatus, JobEntry } from '../lib/types';
+import { LayersIcon } from '../components/icons';
+import { STATUS_ICON, STATUS_ORDER, STATUS_STAT_LABEL } from './statusMeta';
 
 interface StatsBarProps {
   entries: JobEntry[];
 }
-
-const STATUS_ORDER: ApplicationStatus[] = [
-  'saved',
-  'applied',
-  'interviewing',
-  'rejected',
-  'offer',
-];
-
-const STATUS_LABEL: Record<ApplicationStatus, string> = {
-  saved: 'Saved',
-  applied: 'Applied',
-  interviewing: 'Interviewing',
-  rejected: 'Rejected',
-  offer: 'Offer',
-};
 
 export function StatsBar({ entries }: StatsBarProps) {
   const counts = STATUS_ORDER.reduce(
@@ -30,22 +16,30 @@ export function StatsBar({ entries }: StatsBarProps) {
   );
 
   return (
-    <section className="card">
-      <div className="card__header">
-        <h2 className="card__title">Overview</h2>
-      </div>
-      <div className="stats-bar">
-        <div className="stat-tile stat-tile--total">
-          <span className="stat-tile__label">Total</span>
-          <span className="stat-tile__value">{entries.length}</span>
+    <section className="stats-row">
+      <div className="stat-tile total">
+        <span className="sicon">
+          <LayersIcon />
+        </span>
+        <div className="stat-text">
+          <div className="snum">{entries.length}</div>
+          <div className="slabel">Total</div>
         </div>
-        {STATUS_ORDER.map((status) => (
-          <div key={status} className="stat-tile" data-status={status}>
-            <span className="stat-tile__label">{STATUS_LABEL[status]}</span>
-            <span className="stat-tile__value">{counts[status]}</span>
-          </div>
-        ))}
       </div>
+      {STATUS_ORDER.map((status) => {
+        const StatusIcon = STATUS_ICON[status];
+        return (
+          <div key={status} className="stat-tile" data-status={status}>
+            <span className="sicon">
+              <StatusIcon />
+            </span>
+            <div className="stat-text">
+              <div className="snum">{counts[status]}</div>
+              <div className="slabel">{STATUS_STAT_LABEL[status]}</div>
+            </div>
+          </div>
+        );
+      })}
     </section>
   );
 }

@@ -1,51 +1,101 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { getEvents, getTreats } from '../lib/storage';
+import { useEffect, useRef, useState, type MutableRefObject } from 'react';
+import { getEvents, getLootTable } from '../lib/storage';
 import { computeXp } from './xp';
 import { levelForXp } from './levels';
 import { computeBadges, type Badge } from './badges';
-import { pickTreat, shouldUnlockWheel } from './wheel';
+import { applicationsUntilNextMilestone, shouldUnlockWheel } from './wheel';
 import { getLastSpunAtEventCount, setLastSpunAtEventCount } from './wheelState';
-import type { AppEvent } from '../lib/types';
+import { RewardDial } from './RewardDial';
+import { ShieldIcon, FileCheckIcon, TargetIcon, ShieldCheckIcon, TrophyIcon, FlameIcon } from '../components/icons';
+import type { AppEvent, LootTableEntry } from '../lib/types';
 
 const XP_PER_LEVEL = 100;
+
+const BADGE_ICON: Record<string, typeof ShieldIcon> = {
+  'first-application': FileCheckIcon,
+  'first-interview': TargetIcon,
+  'first-rejection': ShieldCheckIcon,
+  'first-offer': TrophyIcon,
+  'seven-day-streak': FlameIcon,
+};
 
 interface GamificationState {
   loading: boolean;
   events: AppEvent[];
-  treats: string[];
+  lootTable: LootTableEntry[];
   xp: number;
   level: number;
   levelLabel: string;
   badges: Badge[];
   wheelUnlocked: boolean;
+  applicationsUntilNext: number;
 }
 
 const INITIAL_STATE: GamificationState = {
   loading: true,
   events: [],
-  treats: [],
+  lootTable: [],
   xp: 0,
   level: 1,
   levelLabel: 'Level 1 Job Seeker',
   badges: [],
   wheelUnlocked: false,
+  applicationsUntilNext: 5,
 };
 
+function levelInto(xp: number) {
+  const safeXp = Math.max(0, xp);
+  return { level: Math.floor(safeXp / XP_PER_LEVEL) + 1, into: safeXp % XP_PER_LEVEL };
+}
+
+/** requestAnimationFrame-driven ease-out count-up, matching the mockup's animateCountUp(). */
+function animateCountUp(
+  from: number,
+  to: number,
+  duration: number,
+  onUpdate: (value: number) => void,
+  rafRef: MutableRefObject<number | null>
+) {
+  if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+  const start = performance.now();
+  function step(ts: number) {
+    const progress = Math.min((ts - start) / duration, 1);
+    const eased = 1 - Math.pow(1 - progress, 2);
+    onUpdate(Math.round(from + (to - from) * eased));
+    rafRef.current = progress < 1 ? requestAnimationFrame(step) : null;
+  }
+  rafRef.current = requestAnimationFrame(step);
+}
+
 /**
- * Self-contained gamification display: fetches its own data (events,
- * treats, spin checkpoint) so any page can drop in <GamificationPanel />
- * with no props. Renders an XP bar, level label, unlocked/locked badges,
- * and a "Quest Reward" wheel button gated by shouldUnlockWheel().
+ * Self-contained gamification display: fetches its own data (events, loot
+ * table, spin checkpoint) so any page can drop in <GamificationPanel />
+ * with no props. Renders the HUD strip (level/XP line/badges/Reward Dial),
+ * and drives the Juice (Part C) count-up + Goal Gradient animations on top
+ * of the underlying XP/level truth from src/gamification/xp.ts + levels.ts.
  */
 export function GamificationPanel() {
   const [state, setState] = useState<GamificationState>(INITIAL_STATE);
-  const [spinning, setSpinning] = useState(false);
-  const [lastTreat, setLastTreat] = useState<string | null>(null);
+
+  // Juice/Goal-Gradient display state — this is what actually renders;
+  // it "chases" state.xp/state.level via the animation effect below rather
+  // than mirroring them instantly, so an XP change reads as an event.
+  const [displayedXp, setDisplayedXp] = useState(0);
+  const [displayedLevel, setDisplayedLevel] = useState(1);
+  const [xpFillPct, setXpFillPct] = useState(0);
+  const [nearGoal, setNearGoal] = useState(false);
+  const [xpFlash, setXpFlash] = useState(false);
+  const [levelFlash, setLevelFlash] = useState(false);
+
+  const prevXpRef = useRef<number | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const xpFillRef = useRef<HTMLDivElement>(null);
+  const timeoutsRef = useRef<number[]>([]);
 
   async function refresh() {
-    const [events, treats, lastSpunAtEventCount] = await Promise.all([
+    const [events, lootTable, lastSpunAtEventCount] = await Promise.all([
       getEvents(),
-      getTreats(),
+      getLootTable(),
       getLastSpunAtEventCount(),
     ]);
     const xp = computeXp(events);
@@ -53,23 +103,24 @@ export function GamificationPanel() {
     setState({
       loading: false,
       events,
-      treats,
+      lootTable,
       xp,
       level,
       levelLabel: label,
       badges: computeBadges(events),
       wheelUnlocked: shouldUnlockWheel(events, lastSpunAtEventCount),
+      applicationsUntilNext: applicationsUntilNextMilestone(events, lastSpunAtEventCount),
     });
   }
 
   useEffect(() => {
     refresh();
 
-    // Keep the panel live if events/treats change elsewhere (e.g. a
+    // Keep the panel live if events/loot table change elsewhere (e.g. a
     // capture or status update happens in another extension page while
     // this one is open).
     function onStorageChanged(changes: { [key: string]: chrome.storage.StorageChange }) {
-      if (changes.appEvents || changes.treats) {
+      if (changes.appEvents || changes.lootTable) {
         refresh();
       }
     }
@@ -77,204 +128,147 @@ export function GamificationPanel() {
     return () => chrome.storage.local.onChanged?.removeListener(onStorageChanged);
   }, []);
 
-  async function handleSpin() {
-    if (!state.wheelUnlocked || spinning || state.treats.length === 0) return;
-    setSpinning(true);
-    setLastTreat(null);
-    // Small delay so the spin reads as an actual action, not an instant swap.
-    await new Promise((resolve) => setTimeout(resolve, 700));
-    const treat = pickTreat(state.treats);
-    setLastTreat(treat);
-    setSpinning(false);
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      timeoutsRef.current.forEach((id) => window.clearTimeout(id));
+    };
+  }, []);
+
+  // Part 2 (Juice) + Part 3 (Goal Gradient): whenever the true XP total
+  // changes, animate the HUD toward it instead of snapping. First paint
+  // snaps with no animation (nothing to "count up" from on load).
+  useEffect(() => {
+    if (state.loading) return;
+    const xp = state.xp;
+
+    if (prevXpRef.current === null) {
+      const info = levelInto(xp);
+      setDisplayedXp(info.into);
+      setDisplayedLevel(info.level);
+      setXpFillPct(info.into);
+      setNearGoal(info.into >= 75);
+      prevXpRef.current = xp;
+      return;
+    }
+
+    const before = prevXpRef.current;
+    prevXpRef.current = xp;
+    if (before === xp) return;
+
+    const beforeInfo = levelInto(before);
+    const afterInfo = levelInto(xp);
+    const leveledUp = afterInfo.level > beforeInfo.level;
+
+    setXpFlash(true);
+    timeoutsRef.current.push(window.setTimeout(() => setXpFlash(false), 500));
+
+    if (!leveledUp) {
+      setXpFillPct(afterInfo.into);
+      setNearGoal(afterInfo.into >= 75);
+      animateCountUp(beforeInfo.into, afterInfo.into, 500, setDisplayedXp, rafRef);
+      return;
+    }
+
+    // Two-stage level-up animation: race the fill to 100% (snappy,
+    // pulsing — it's crossing the goal line), reset instantly with the
+    // CSS transition disabled, then count up again inside the new level.
+    setXpFillPct(100);
+    setNearGoal(true);
+    animateCountUp(beforeInfo.into, 100, 350, setDisplayedXp, rafRef);
+
+    const resetTimeout = window.setTimeout(() => {
+      const fillEl = xpFillRef.current;
+      if (fillEl) {
+        fillEl.style.transition = 'none';
+        fillEl.style.width = '0%';
+        void fillEl.offsetWidth; // force reflow so the reset isn't animated
+        fillEl.style.transition = '';
+      }
+      setNearGoal(false);
+      setXpFillPct(0);
+      setDisplayedXp(0);
+      setDisplayedLevel(afterInfo.level);
+      setLevelFlash(true);
+      timeoutsRef.current.push(window.setTimeout(() => setLevelFlash(false), 500));
+
+      setXpFillPct(afterInfo.into);
+      setNearGoal(afterInfo.into >= 75);
+      animateCountUp(0, afterInfo.into, 500, setDisplayedXp, rafRef);
+    }, 450);
+    timeoutsRef.current.push(resetTimeout);
+    // Only the raw XP total should re-trigger this animation sequence.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.xp, state.loading]);
+
+  async function handleSpun() {
     // Re-read the event count right before persisting rather than using the
     // render-time `state.events.length` closed over when the spin started —
-    // if a new event landed elsewhere during the 700ms delay, persisting the
-    // stale (smaller) count would make the wheel look unlocked again
-    // immediately, even though nothing happened since the real checkpoint.
+    // if a new event landed elsewhere while the dial was spinning,
+    // persisting the stale (smaller) count would make the wheel look
+    // unlocked again immediately, even though nothing happened since the
+    // real checkpoint.
     const currentEvents = await getEvents();
     await setLastSpunAtEventCount(currentEvents.length);
-    setState((prev) => ({ ...prev, wheelUnlocked: false }));
+    refresh();
   }
 
   if (state.loading) {
-    return <div style={styles.panel}>Loading quest log…</div>;
+    return <div className="hud" style={{ padding: 16 }}>Loading quest log…</div>;
   }
 
-  const xpIntoLevel = state.xp % XP_PER_LEVEL;
-  const xpProgressPct = Math.min(100, (xpIntoLevel / XP_PER_LEVEL) * 100);
+  const flavor = state.levelLabel.replace(/^Level \d+ /, '');
 
   return (
-    <div style={styles.panel}>
-      <div style={styles.header}>
-        <span style={styles.questBadgeIcon}>⚔️</span>
-        <div>
-          <div style={styles.levelLabel}>{state.levelLabel}</div>
-          <div style={styles.xpText}>
-            {xpIntoLevel} / {XP_PER_LEVEL} XP toward Level {state.level + 1}
-            <span style={styles.totalXp}> · {state.xp} XP total</span>
+    <section className="hud">
+      <div className="hud-level">
+        <div className="hud-avatar">
+          <ShieldIcon />
+        </div>
+        <div className="hud-level-text">
+          <div className="hud-level-row">
+            <span className={`hud-level-num${levelFlash ? ' flash' : ''}`}>
+              LVL {String(displayedLevel).padStart(2, '0')}
+            </span>
+            <span className="hud-level-label">{flavor}</span>
+          </div>
+          <div className="xp-line-row">
+            <div className="xp-line-track">
+              <div
+                ref={xpFillRef}
+                className={`xp-line-fill${nearGoal ? ' near-goal' : ''}`}
+                style={{ width: `${xpFillPct}%` }}
+              />
+            </div>
+            <span className="xp-line-label">
+              <span className={`xp-current${xpFlash ? ' flash' : ''}`}>{displayedXp}</span> / {XP_PER_LEVEL} XP
+            </span>
           </div>
         </div>
       </div>
 
-      <div style={styles.xpBarTrack} aria-label="XP progress">
-        <div style={{ ...styles.xpBarFill, width: `${xpProgressPct}%` }} />
+      <div className="hud-badges">
+        {state.badges.map((badge) => {
+          const BadgeIcon = BADGE_ICON[badge.id] ?? ShieldIcon;
+          return (
+            <span
+              key={badge.id}
+              className={`badge-chip${badge.unlocked ? '' : ' locked'}`}
+              data-tip={badge.unlocked ? badge.label : `Locked — ${badge.label}`}
+              aria-label={`${badge.label}: ${badge.description}${badge.unlocked ? '' : ' (locked)'}`}
+            >
+              <BadgeIcon />
+            </span>
+          );
+        })}
       </div>
 
-      <div style={styles.sectionTitle}>Badges</div>
-      <ul style={styles.badgeList}>
-        {state.badges.map((badge) => (
-          <li
-            key={badge.id}
-            style={badge.unlocked ? styles.badgeUnlocked : styles.badgeLocked}
-            title={badge.description}
-          >
-            <span style={{ marginRight: 6 }}>{badge.unlocked ? '🏅' : '🔒'}</span>
-            {badge.label}
-          </li>
-        ))}
-      </ul>
-
-      <div style={styles.sectionTitle}>Quest Reward</div>
-      <div style={styles.wheelBox}>
-        <button
-          type="button"
-          onClick={handleSpin}
-          disabled={!state.wheelUnlocked || spinning || state.treats.length === 0}
-          style={{
-            ...styles.spinButton,
-            ...(state.wheelUnlocked && !spinning ? styles.spinButtonActive : styles.spinButtonDisabled),
-          }}
-        >
-          {spinning ? 'Spinning…' : state.wheelUnlocked ? '🎡 Spin for a Reward' : '🎡 Wheel Locked'}
-        </button>
-        <p style={styles.wheelHint}>
-          {state.treats.length === 0
-            ? 'Add some treats in Settings to enable the wheel.'
-            : state.wheelUnlocked
-              ? 'A milestone unlocked a spin — claim it!'
-              : 'Unlocks every 5 applications, every rejection, and every level-up.'}
-        </p>
-        {lastTreat && (
-          <div style={styles.treatResult}>
-            You earned: <strong>{lastTreat}</strong>
-          </div>
-        )}
-      </div>
-    </div>
+      <RewardDial
+        unlocked={state.wheelUnlocked}
+        applicationsUntilNext={state.applicationsUntilNext}
+        lootTable={state.lootTable}
+        onSpun={handleSpun}
+      />
+    </section>
   );
 }
-
-const styles: Record<string, CSSProperties> = {
-  panel: {
-    fontFamily: 'system-ui, sans-serif',
-    maxWidth: 480,
-    padding: 20,
-    borderRadius: 12,
-    border: '1px solid #e5e0f7',
-    background: 'linear-gradient(180deg, #faf9ff 0%, #ffffff 100%)',
-    color: '#1f1a3d',
-  },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 12,
-  },
-  questBadgeIcon: {
-    fontSize: 28,
-  },
-  levelLabel: {
-    fontSize: 18,
-    fontWeight: 700,
-    color: '#4b2fb3',
-  },
-  xpText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  totalXp: {
-    color: '#999',
-  },
-  xpBarTrack: {
-    height: 10,
-    borderRadius: 6,
-    background: '#ece8fb',
-    overflow: 'hidden',
-    marginBottom: 20,
-  },
-  xpBarFill: {
-    height: '100%',
-    borderRadius: 6,
-    background: 'linear-gradient(90deg, #7c5cff, #b98cff)',
-    transition: 'width 300ms ease',
-  },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: 700,
-    textTransform: 'uppercase',
-    letterSpacing: 0.6,
-    color: '#8a7fc4',
-    marginBottom: 8,
-    marginTop: 16,
-  },
-  badgeList: {
-    listStyle: 'none',
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 8,
-    padding: 0,
-    margin: 0,
-  },
-  badgeUnlocked: {
-    fontSize: 12,
-    padding: '6px 10px',
-    borderRadius: 999,
-    background: '#efe9ff',
-    border: '1px solid #c9b8ff',
-    color: '#4b2fb3',
-    fontWeight: 600,
-  },
-  badgeLocked: {
-    fontSize: 12,
-    padding: '6px 10px',
-    borderRadius: 999,
-    background: '#f2f2f2',
-    border: '1px solid #e0e0e0',
-    color: '#999',
-  },
-  wheelBox: {
-    padding: 14,
-    borderRadius: 10,
-    background: '#fbfaff',
-    border: '1px dashed #d3c6ff',
-    textAlign: 'center' as const,
-  },
-  spinButton: {
-    fontSize: 14,
-    fontWeight: 700,
-    padding: '10px 18px',
-    borderRadius: 999,
-    border: 'none',
-    cursor: 'pointer',
-  },
-  spinButtonActive: {
-    background: 'linear-gradient(90deg, #7c5cff, #b98cff)',
-    color: '#fff',
-  },
-  spinButtonDisabled: {
-    background: '#e5e0f7',
-    color: '#a89fd1',
-    cursor: 'not-allowed',
-  },
-  wheelHint: {
-    fontSize: 11,
-    color: '#8a7fc4',
-    marginTop: 8,
-    marginBottom: 0,
-  },
-  treatResult: {
-    marginTop: 10,
-    fontSize: 13,
-    color: '#4b2fb3',
-  },
-};

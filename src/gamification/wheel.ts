@@ -1,4 +1,4 @@
-import type { AppEvent } from '../lib/types';
+import type { AppEvent, LootTableEntry } from '../lib/types';
 import { computeXp } from './xp';
 import { levelForXp } from './levels';
 import { countDistinctEntriesWithStatus, reachedStatusKeys } from './statusMilestones';
@@ -69,15 +69,59 @@ export function shouldUnlockWheel(
 }
 
 /**
- * Pure random pick from the user-configured treat list. Returns '' for an
- * empty list rather than throwing — callers (the UI) should already be
- * disabling the wheel button when there are no treats configured, so this
- * is a defensive fallback, not the primary guard.
+ * Goal Gradient countdown: how many more distinct "applied" entries are
+ * needed to cross the next every-5-applications milestone, counting only
+ * applications reached since `lastSpunAtEventCount` — the same window
+ * shouldUnlockWheel() uses for its own every-5 check, so this stays
+ * consistent with when the wheel actually unlocks.
+ *
+ * Deliberately ignores the rejection/level-up unlock paths: those are
+ * "any moment" triggers with no meaningful countdown, so the HUD's
+ * countdown text is specifically about the applications milestone (the
+ * mockup's dial-hint text mirrors this — "N more applications to next
+ * spin (or any rejection)").
+ *
+ * Always returns a value in [1, 5]: 5 right after a spin (or if nothing's
+ * happened yet), counting down as applications land, wrapping back to 5
+ * the instant a multiple of 5 is crossed (at which point the caller should
+ * be reading shouldUnlockWheel() as true anyway, not this countdown).
  */
-export function pickTreat(treats: string[]): string {
-  if (treats.length === 0) {
-    return '';
+export function applicationsUntilNextMilestone(
+  events: AppEvent[],
+  lastSpunAtEventCount: number
+): number {
+  const clampedCount = Math.max(0, Math.min(lastSpunAtEventCount, events.length));
+  const priorEvents = events.slice(0, clampedCount);
+
+  const priorApplied = countDistinctEntriesWithStatus(reachedStatusKeys(priorEvents), 'applied');
+  const currentApplied = countDistinctEntriesWithStatus(reachedStatusKeys(events), 'applied');
+  const sinceLastSpin = Math.max(0, currentApplied - priorApplied);
+
+  const remainder = sinceLastSpin % 5;
+  return remainder === 0 ? 5 : 5 - remainder;
+}
+
+/**
+ * Weighted-random pick from the user-configured loot table (Part D: Custom
+ * Admin Loot Table). Same algorithm as the mockup's pickWeightedTreat():
+ * walk the list subtracting each entry's weight from a running random
+ * value in [0, total weight) until it goes non-positive. Entries with
+ * larger weight occupy a proportionally larger slice of that range, so
+ * they're proportionally more likely to be the one the countdown lands on.
+ *
+ * Returns null for an empty table or a table whose weights sum to <= 0 —
+ * callers (the UI) should already be disabling the wheel in that case, so
+ * this is a defensive fallback, not the primary guard.
+ */
+export function pickWeightedTreat(entries: LootTableEntry[]): LootTableEntry | null {
+  const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
+  if (entries.length === 0 || total <= 0) {
+    return null;
   }
-  const index = Math.floor(Math.random() * treats.length);
-  return treats[index];
+  let r = Math.random() * total;
+  for (const entry of entries) {
+    r -= entry.weight;
+    if (r <= 0) return entry;
+  }
+  return entries[entries.length - 1];
 }

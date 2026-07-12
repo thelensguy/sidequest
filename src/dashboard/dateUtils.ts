@@ -48,3 +48,24 @@ export function localDateOnlyToIso(dateOnly: string): string | null {
 
   return date.toISOString();
 }
+
+/** Compact "M/D" rendering (local time), used in the quest-card meta line. */
+export function formatShortDate(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
+/**
+ * "M/D" if dateAdded and lastUpdated fall on the same local calendar day,
+ * else "M/D→M/D" — matches the mockup's quest-meta date format (e.g.
+ * "6/28→7/11" for a row that's moved since it was added, or just "7/11"
+ * for one that hasn't).
+ */
+export function formatMetaDateRange(dateAdded: string, lastUpdated: string): string {
+  const added = toLocalDateString(new Date(dateAdded));
+  const updated = toLocalDateString(new Date(lastUpdated));
+  const addedShort = formatShortDate(dateAdded);
+  if (added === updated) return addedShort;
+  return `${addedShort}→${formatShortDate(lastUpdated)}`;
+}

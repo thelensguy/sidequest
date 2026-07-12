@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { pickTreat, shouldUnlockWheel } from '../wheel';
+import { applicationsUntilNextMilestone, pickWeightedTreat, shouldUnlockWheel } from '../wheel';
 import { statusChange } from './testUtils';
+import type { LootTableEntry } from '../../lib/types';
 
 describe('shouldUnlockWheel', () => {
   it('is false with no events', () => {
@@ -86,29 +87,117 @@ describe('shouldUnlockWheel', () => {
   });
 });
 
-describe('pickTreat', () => {
+describe('pickWeightedTreat', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('returns an empty string for an empty list', () => {
-    expect(pickTreat([])).toBe('');
+  const LOOT: LootTableEntry[] = [
+    { id: 'boba', label: 'Get boba', tier: 'common', weight: 40 },
+    { id: 'episode', label: 'Watch an episode', tier: 'common', weight: 35 },
+    { id: 'afternoon', label: 'Take the afternoon off', tier: 'rare', weight: 15 },
+    { id: 'daytrip', label: 'Plan a day trip', tier: 'epic', weight: 6 },
+    { id: 'splurge', label: 'Treat yourself to something nice', tier: 'epic', weight: 4 },
+  ];
+
+  it('returns null for an empty table', () => {
+    expect(pickWeightedTreat([])).toBeNull();
   });
 
-  it('returns the only treat when there is exactly one', () => {
-    expect(pickTreat(['Get boba'])).toBe('Get boba');
+  it('returns null when all weights sum to <= 0', () => {
+    expect(pickWeightedTreat([{ id: 'a', label: 'A', tier: 'common', weight: 0 }])).toBeNull();
   });
 
-  it('picks deterministically based on Math.random', () => {
-    const treats = ['Get boba', 'Watch an episode', 'Take the afternoon off'];
-    vi.spyOn(Math, 'random').mockReturnValue(0.5); // index 1 of 3
-    expect(pickTreat(treats)).toBe('Watch an episode');
+  it('returns the only entry when there is exactly one', () => {
+    const entries: LootTableEntry[] = [{ id: 'boba', label: 'Get boba', tier: 'common', weight: 1 }];
+    expect(pickWeightedTreat(entries)).toEqual(entries[0]);
   });
 
-  it('only ever returns a value from the input list', () => {
-    const treats = ['A', 'B', 'C', 'D'];
+  it('picks deterministically based on Math.random, respecting weight order', () => {
+    // total weight = 100. r = 0.5 * 100 = 50, which lands past 'boba' (40)
+    // into 'episode' (40 + 35 = 75 >= 50).
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    expect(pickWeightedTreat(LOOT)?.id).toBe('episode');
+  });
+
+  it('picks the first entry when Math.random returns 0', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    expect(pickWeightedTreat(LOOT)?.id).toBe('boba');
+  });
+
+  it('picks the last entry when Math.random returns just under 1', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.9999999);
+    expect(pickWeightedTreat(LOOT)?.id).toBe('splurge');
+  });
+
+  it('only ever returns an entry from the input table', () => {
     for (let i = 0; i < 20; i++) {
-      expect(treats).toContain(pickTreat(treats));
+      const picked = pickWeightedTreat(LOOT);
+      expect(LOOT.map((e) => e.id)).toContain(picked?.id);
     }
+  });
+
+  it('sanity-checks distribution roughly matches weight over many trials', () => {
+    // Heavier-weighted entries should come up meaningfully more often than
+    // lighter ones over a large sample — not an exact statistical test,
+    // just a guard against an inverted or broken weighting algorithm.
+    const counts: Record<string, number> = {};
+    const trials = 5000;
+    for (let i = 0; i < trials; i++) {
+      const picked = pickWeightedTreat(LOOT);
+      if (picked) counts[picked.id] = (counts[picked.id] ?? 0) + 1;
+    }
+    // 'boba' (weight 40) should come up far more often than 'splurge' (weight 4).
+    expect(counts.boba).toBeGreaterThan(counts.splurge * 3);
+    // Every entry should show up at least once in 5000 trials.
+    for (const entry of LOOT) {
+      expect(counts[entry.id]).toBeGreaterThan(0);
+    }
+  });
+});
+
+describe('applicationsUntilNextMilestone', () => {
+  it('is 5 with no events', () => {
+    expect(applicationsUntilNextMilestone([], 0)).toBe(5);
+  });
+
+  it('is 5 right after a spin, before any new applications', () => {
+    const events = [statusChange('applied')];
+    expect(applicationsUntilNextMilestone(events, events.length)).toBe(5);
+  });
+
+  it('counts down as distinct entries reach applied since the last spin', () => {
+    const events = Array.from({ length: 3 }, (_, i) => statusChange('applied', undefined, undefined, `job-${i}`));
+    expect(applicationsUntilNextMilestone(events, 0)).toBe(2);
+  });
+
+  it('does not count applications that happened before the last spin checkpoint', () => {
+    const events = [
+      statusChange('applied', undefined, undefined, 'job-0'),
+      statusChange('applied', undefined, undefined, 'job-1'),
+      statusChange('applied', undefined, undefined, 'job-2'),
+    ];
+    // Spun after the first two — only job-2 counts toward the new countdown.
+    expect(applicationsUntilNextMilestone(events, 2)).toBe(4);
+  });
+
+  it('wraps back to 5 once a multiple of 5 is crossed', () => {
+    const events = Array.from({ length: 5 }, (_, i) => statusChange('applied', undefined, undefined, `job-${i}`));
+    expect(applicationsUntilNextMilestone(events, 0)).toBe(5);
+  });
+
+  it('does not count repeated toggles on the same entry (farming guard)', () => {
+    const events = [
+      statusChange('applied', undefined, 'saved', 'job-1'),
+      statusChange('interviewing', undefined, 'applied', 'job-1'),
+      statusChange('applied', undefined, 'interviewing', 'job-1'),
+    ];
+    expect(applicationsUntilNextMilestone(events, 1)).toBe(5);
+  });
+
+  it('clamps an out-of-range lastSpunAtEventCount instead of throwing', () => {
+    const events = [statusChange('applied')];
+    expect(() => applicationsUntilNextMilestone(events, 999)).not.toThrow();
+    expect(() => applicationsUntilNextMilestone(events, -5)).not.toThrow();
   });
 });

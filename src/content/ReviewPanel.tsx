@@ -1,6 +1,7 @@
 import type { ChangeEvent } from 'react';
 import type { ExtractedJob } from '../capture/adapters';
 import type { FieldStatuses } from './fieldStatus';
+import { CheckCircleIcon, XCircleIcon } from '../components/icons';
 
 type ReviewPhase = 'open' | 'saving' | 'saved' | 'error';
 
@@ -43,7 +44,10 @@ export function ReviewPanel({
   if (phase === 'saved') {
     return (
       <div className="sq-panel" role="dialog" aria-label="SideQuest capture saved">
-        <p className="sq-saved-message">Saved to SideQuest.</p>
+        <p className="sq-saved-message">
+          <CheckCircleIcon />
+          Saved to SideQuest.
+        </p>
       </div>
     );
   }
@@ -61,7 +65,7 @@ export function ReviewPanel({
           <span className="sq-field-label">
             {FIELD_LABELS[field]}
             <span className={`sq-status sq-status--${statuses[field]}`}>
-              {statuses[field] === 'extracted' ? 'Auto-filled' : 'Not found'}
+              {statuses[field] === 'extracted' ? '[AUTO-FILLED]' : '[NOT FOUND]'}
             </span>
           </span>
           <input
@@ -73,7 +77,12 @@ export function ReviewPanel({
         </label>
       ))}
 
-      {phase === 'error' && errorMessage && <p className="sq-error">{errorMessage}</p>}
+      {phase === 'error' && errorMessage && (
+        <p className="sq-error">
+          <XCircleIcon />
+          {errorMessage}
+        </p>
+      )}
 
       <div className="sq-actions">
         <button type="button" className="sq-btn sq-btn--primary" onClick={onSave} disabled={!canSave}>

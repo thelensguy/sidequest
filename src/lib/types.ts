@@ -33,3 +33,11 @@ export interface AppEvent {
     toStatus?: ApplicationStatus;
   };
 }
+
+/** A single weighted entry in the reward-wheel's custom loot table. */
+export interface LootTableEntry {
+  id: string;
+  label: string;
+  tier: 'common' | 'rare' | 'epic';
+  weight: number;
+}

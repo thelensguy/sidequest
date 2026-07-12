@@ -3,6 +3,7 @@ import { type ActiveTabInfo, captureFromTab, getActiveTab, isCompleteJob } from 
 import type { ExtractedJob } from '../capture/adapters';
 import { addJobEntry, appendEvent } from '../lib/storage';
 import type { AppEventType, JobEntry, JobEntrySource } from '../lib/types';
+import { CheckCircleIcon, ShieldIcon, XCircleIcon } from '../components/icons';
 
 type ViewState =
   | { phase: 'idle' }
@@ -131,7 +132,15 @@ export function Popup() {
 
   return (
     <div style={styles.container}>
-      <h1 style={styles.heading}>SideQuest</h1>
+      <div style={styles.brand}>
+        <span style={styles.brandMark}>
+          <ShieldIcon />
+        </span>
+        <div>
+          <h1 style={styles.heading}>SideQuest</h1>
+          <p style={styles.eyebrow}>Capture</p>
+        </div>
+      </div>
 
       {state.phase !== 'manual' && state.phase !== 'saved' && (
         <button
@@ -146,11 +155,17 @@ export function Popup() {
 
       {state.phase === 'saved' && (
         <p style={styles.success}>
+          <CheckCircleIcon style={styles.statusIcon} />
           Saved &ldquo;{state.entry.role}&rdquo; at {state.entry.company || '(unknown company)'}.
         </p>
       )}
 
-      {state.phase === 'error' && <p style={styles.error}>{state.message}</p>}
+      {state.phase === 'error' && (
+        <p style={styles.error}>
+          <XCircleIcon style={styles.statusIcon} />
+          {state.message}
+        </p>
+      )}
 
       {state.phase === 'manual' && (
         <form onSubmit={handleManualSubmit} style={styles.form}>
@@ -208,36 +223,122 @@ export function Popup() {
   );
 }
 
+/**
+ * Premium HUD tokens, hand-copied from dashboard.css's :root block (this
+ * bundle is a separate CRXJS entry point with no shared stylesheet, so the
+ * popup can't just `var(--accent)` off a global — the hex values have to
+ * live here too). Keep these in sync if the dashboard palette changes.
+ */
+const theme = {
+  bg: '#0a0a0b',
+  surface: '#121212',
+  surfaceRaised: '#161616',
+  border: '#1f2937',
+  text: '#ededef',
+  text2: '#9ba1ac',
+  text3: '#7c8695',
+  accent: '#818cf8',
+  accentHover: '#9aa3f9',
+  offer: '#4fbe8b',
+  rejected: '#e17b76',
+  mono: "ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace",
+  sans: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif",
+};
+
 const styles: Record<string, CSSProperties> = {
-  container: { padding: 16, fontFamily: 'system-ui, sans-serif' },
-  heading: { fontSize: 16, margin: '0 0 12px' },
+  container: {
+    padding: 16,
+    fontFamily: theme.sans,
+    background: theme.bg,
+    color: theme.text,
+  },
+  brand: { display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 },
+  brandMark: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    background: theme.surface,
+    border: `1px solid ${theme.border}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.accent,
+    fontSize: 14,
+    flexShrink: 0,
+  },
+  heading: { fontSize: 14, fontWeight: 600, margin: 0, letterSpacing: '-0.01em' },
+  eyebrow: {
+    fontFamily: theme.mono,
+    fontSize: 10,
+    letterSpacing: '0.08em',
+    textTransform: 'uppercase',
+    color: theme.text3,
+    margin: '2px 0 0',
+  },
   primaryButton: {
     width: '100%',
-    padding: '8px 12px',
-    fontSize: 13,
+    padding: '9px 12px',
+    fontSize: 12.5,
     fontWeight: 600,
-    color: '#fff',
-    background: '#2563eb',
-    border: 'none',
-    borderRadius: 6,
+    fontFamily: theme.sans,
+    color: theme.bg,
+    background: theme.accent,
+    border: `1px solid ${theme.accent}`,
+    borderRadius: 7,
     cursor: 'pointer',
   },
   secondaryButton: {
     width: '100%',
-    padding: '8px 12px',
-    fontSize: 13,
-    color: '#333',
-    background: '#f1f1f1',
-    border: '1px solid #ddd',
-    borderRadius: 6,
+    padding: '9px 12px',
+    fontSize: 12.5,
+    fontWeight: 600,
+    fontFamily: theme.sans,
+    color: theme.text,
+    background: theme.surface,
+    border: `1px solid ${theme.border}`,
+    borderRadius: 7,
     cursor: 'pointer',
     marginTop: 8,
   },
-  success: { fontSize: 12, color: '#166534', marginTop: 10 },
-  error: { fontSize: 12, color: '#b91c1c', marginTop: 10 },
-  helperText: { fontSize: 12, color: '#666', margin: '0 0 8px' },
+  success: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 6,
+    fontSize: 12,
+    color: theme.offer,
+    marginTop: 10,
+    lineHeight: 1.5,
+  },
+  error: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: 6,
+    fontSize: 12,
+    color: theme.rejected,
+    marginTop: 10,
+    lineHeight: 1.5,
+  },
+  statusIcon: { flexShrink: 0, marginTop: 2, fontSize: 13 },
+  helperText: { fontSize: 12, color: theme.text3, margin: '0 0 8px' },
   form: { marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 },
-  label: { fontSize: 12, color: '#333', display: 'flex', flexDirection: 'column', gap: 4 },
-  input: { fontSize: 13, padding: '6px 8px', border: '1px solid #ccc', borderRadius: 4 },
+  label: {
+    fontSize: 10.5,
+    fontWeight: 600,
+    letterSpacing: '0.05em',
+    textTransform: 'uppercase',
+    color: theme.text3,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 4,
+  },
+  input: {
+    fontSize: 13,
+    fontFamily: theme.sans,
+    padding: '7px 9px',
+    background: theme.bg,
+    border: `1px solid ${theme.border}`,
+    borderRadius: 6,
+    color: theme.text,
+  },
   formActions: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 4 },
 };

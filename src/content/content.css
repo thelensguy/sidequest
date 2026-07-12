@@ -4,6 +4,10 @@
  * stylesheet. That keeps it fully scoped: none of this can bleed onto
  * LinkedIn/Indeed/ZipRecruiter's own styles, and none of theirs can bleed
  * into it.
+ *
+ * Tokens mirror dashboard.css's "Premium HUD" :root block, scoped to
+ * .sq-root instead of :root since this lives in a shadow tree layered over
+ * an arbitrary host page rather than owning the whole document.
  */
 
 :host {
@@ -11,12 +15,27 @@
 }
 
 .sq-root {
+  --bg: #0a0a0b;
+  --surface: #121212;
+  --surface-raised: #161616;
+  --border: #1f2937;
+  --text: #ededef;
+  --text-2: #9ba1ac;
+  --text-3: #7c8695;
+  --accent: #818cf8;
+  --accent-hover: #9aa3f9;
+  --s-offer: #4fbe8b;
+  --s-rejected: #e17b76;
+  --mono: ui-monospace, 'SF Mono', 'Cascadia Code', Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial,
+    sans-serif;
+
   position: relative;
   display: block;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-family: var(--sans);
   font-size: 13px;
   line-height: 1.4;
-  color: #1a1d23;
+  color: var(--text);
 }
 
 .sq-bubble {
@@ -25,20 +44,23 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  background: #3457d5;
-  color: #fff;
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--accent);
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(16, 24, 40, 0.35);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    transform 0.12s ease;
 }
 
 .sq-bubble:hover {
-  transform: scale(1.07);
-  box-shadow: 0 4px 16px rgba(16, 24, 40, 0.4);
-  background: #2943ab;
+  transform: scale(1.05);
+  border-color: var(--accent);
 }
 
 .sq-bubble:active {
@@ -46,29 +68,30 @@
 }
 
 .sq-bubble--open {
-  background: #1a1d23;
+  color: var(--text);
+  border-color: var(--accent);
 }
 
 .sq-bubble svg {
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   pointer-events: none;
 }
 
 .sq-panel {
   box-sizing: border-box;
   position: absolute;
-  bottom: 60px;
+  bottom: 52px;
   right: 0;
   width: 300px;
   max-width: calc(100vw - 40px);
   max-height: calc(100vh - 100px);
   overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid #e3e6ea;
+  background: var(--surface);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 8px 30px rgba(16, 24, 40, 0.25);
-  padding: 14px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+  padding: 16px;
 }
 
 .sq-panel * {
@@ -76,16 +99,16 @@
 }
 
 .sq-panel-title {
-  margin: 0 0 10px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #1a1d23;
+  margin: 0 0 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
 }
 
 .sq-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   margin-bottom: 10px;
 }
 
@@ -93,55 +116,64 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
+  font-size: 10.5px;
   font-weight: 600;
-  color: #1a1d23;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
 }
 
 .sq-status {
-  font-size: 10px;
+  font-family: var(--mono);
+  font-size: 9.5px;
   font-weight: 600;
-  text-transform: uppercase;
   letter-spacing: 0.02em;
-  padding: 2px 6px;
-  border-radius: 999px;
+  text-transform: none;
 }
 
 .sq-status--extracted {
-  background: #eaf0ff;
-  color: #3457d5;
+  color: var(--accent);
 }
 
 .sq-status--empty {
-  background: #fff7ed;
-  color: #9a5b0a;
+  color: var(--s-rejected);
 }
 
 .sq-input {
   width: 100%;
   font-size: 13px;
-  font-family: inherit;
-  color: #1a1d23;
+  font-family: var(--sans);
+  color: var(--text);
   padding: 7px 9px;
-  border: 1px solid #e3e6ea;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fff;
+  background: var(--bg);
 }
 
 .sq-input:focus {
-  outline: 2px solid #3457d5;
-  outline-offset: 1px;
+  outline: none;
+  border-color: var(--accent);
 }
 
 .sq-input:disabled {
-  background: #f7f8fa;
-  color: #6b7280;
+  background: var(--surface-raised);
+  color: var(--text-3);
 }
 
 .sq-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   font-size: 12px;
-  color: #b91c1c;
+  color: var(--s-rejected);
   margin: 0 0 10px;
+}
+
+.sq-error svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+  width: 13px;
+  height: 13px;
 }
 
 .sq-actions {
@@ -155,40 +187,53 @@
   box-sizing: border-box;
   flex: 1;
   text-align: center;
-  font-size: 13px;
+  font-family: var(--sans);
+  font-size: 12.5px;
   font-weight: 600;
   padding: 8px 10px;
-  border-radius: 6px;
+  border-radius: 7px;
   cursor: pointer;
 }
 
 .sq-btn--primary {
-  background: #3457d5;
-  color: #fff;
+  background: var(--accent);
+  color: var(--bg);
+  border: 1px solid var(--accent);
 }
 
 .sq-btn--primary:hover:not(:disabled) {
-  background: #2943ab;
+  background: var(--accent-hover);
 }
 
 .sq-btn--primary:disabled {
-  background: #b7c3ea;
+  background: var(--border);
+  border-color: var(--border);
+  color: var(--text-3);
   cursor: not-allowed;
 }
 
 .sq-btn--secondary {
-  background: #f1f2f4;
-  color: #1a1d23;
-  border: 1px solid #e3e6ea;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
 }
 
 .sq-btn--secondary:hover:not(:disabled) {
-  background: #e3e6ea;
+  background: var(--surface-raised);
 }
 
 .sq-saved-message {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   margin: 0;
   font-size: 13px;
-  color: #166534;
+  color: var(--s-offer);
   font-weight: 600;
+}
+
+.sq-saved-message svg {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }

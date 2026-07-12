@@ -1,24 +1,21 @@
+import { useState } from 'react';
 import type { ApplicationStatus, JobEntry } from '../lib/types';
-import { appendEvent, deleteJobEntry, updateJobEntry } from '../lib/storage';
+import { appendEvent, deleteJobEntry, getEvents, updateJobEntry } from '../lib/storage';
+import { computeXp } from '../gamification/xp';
 import { isStale, daysSince } from './staleness';
 import { EditableField } from './EditableField';
 import { validateJobUrl } from './urlValidation';
+import { formatMetaDateRange } from './dateUtils';
+import { ExternalLinkIcon, XIcon } from '../components/icons';
+import { STATUS_ICON, STATUS_ORDER, STATUS_TAG_LABEL } from './statusMeta';
 
-function linkLabel(url: string): string {
+function linkHost(url: string): string {
   try {
     return new URL(url).hostname.replace(/^www\./, '');
   } catch {
-    return 'View posting';
+    return '';
   }
 }
-
-const STATUS_OPTIONS: ApplicationStatus[] = [
-  'saved',
-  'applied',
-  'interviewing',
-  'rejected',
-  'offer',
-];
 
 interface JobRowProps {
   entry: JobEntry;
@@ -27,11 +24,27 @@ interface JobRowProps {
 
 export function JobRow({ entry, onChanged }: JobRowProps) {
   const stale = isStale(entry.lastUpdated);
+  const StatusIcon = STATUS_ICON[entry.status];
+
+  // Part 1 (Juice): floating "+N XP" ticker. `tickerKey` forces a fresh
+  // DOM node (and therefore a restarted CSS animation) each time a new
+  // ticker fires, since firing the same status twice in a row wouldn't
+  // otherwise remount the element.
+  const [ticker, setTicker] = useState<{ key: number; amount: number } | null>(null);
 
   async function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const toStatus = e.target.value as ApplicationStatus;
     const fromStatus = entry.status;
     if (toStatus === fromStatus) return;
+
+    // Snapshot XP before the write. computeXp() already runs every event
+    // through reachedStatusKeys()'s anti-farming dedup (src/gamification/
+    // statusMilestones.ts), so comparing before/after totals is a correct,
+    // reuse-the-real-rule way to detect whether this particular status
+    // change is a genuinely NEW (entry, status) pair — no need to
+    // reimplement that dedup logic locally.
+    const eventsBefore = await getEvents();
+    const xpBefore = computeXp(eventsBefore);
 
     const now = new Date().toISOString();
     await updateJobEntry(entry.id, { status: toStatus, lastUpdated: now });
@@ -41,6 +54,14 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
       timestamp: now,
       metadata: { fromStatus, toStatus },
     });
+
+    const eventsAfter = await getEvents();
+    const xpAfter = computeXp(eventsAfter);
+    const delta = xpAfter - xpBefore;
+    if (delta > 0) {
+      setTicker({ key: Date.now(), amount: delta });
+    }
+
     onChanged();
   }
 
@@ -71,67 +92,98 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
     onChanged();
   }
 
+  const meta = [linkHost(entry.url) || entry.source, formatMetaDateRange(entry.dateAdded, entry.lastUpdated)]
+    .filter(Boolean)
+    .join(' · ');
+
   return (
-    <tr className={stale ? 'is-stale' : undefined}>
-      <td>
-        <EditableField value={entry.company} onSave={(v) => handleFieldSave('company', v)} />
-      </td>
-      <td>
-        <EditableField value={entry.role} onSave={(v) => handleFieldSave('role', v)} />
-      </td>
-      <td>
+    <div className="quest-card" data-status={entry.status}>
+      <div className="qicon">
+        <StatusIcon />
+      </div>
+
+      <div className="quest-main">
+        <EditableField
+          value={entry.company}
+          onSave={(v) => handleFieldSave('company', v)}
+          renderDisplay={(v) => <span className="quest-company">{v || 'Untitled company'}</span>}
+        />
+        <EditableField
+          value={entry.role}
+          onSave={(v) => handleFieldSave('role', v)}
+          renderDisplay={(v) => (
+            <span className="quest-role" title={v}>
+              {v || 'Untitled role'}
+            </span>
+          )}
+        />
+        <span className="quest-meta">{meta}</span>
+        {stale && (
+          <span className="stale-badge" title={`No update in ${daysSince(entry.lastUpdated)} days`}>
+            Stale · {daysSince(entry.lastUpdated)}d
+          </span>
+        )}
+      </div>
+
+      <div className="quest-side">
+        <div className="status-tag-wrap">
+          <StatusIcon />
+          <select
+            className="status-select"
+            value={entry.status}
+            onChange={handleStatusChange}
+            aria-label={`Status for ${entry.role || 'entry'} at ${entry.company || 'unknown company'}`}
+          >
+            {STATUS_ORDER.map((status) => (
+              <option key={status} value={status}>
+                {STATUS_TAG_LABEL[status]}
+              </option>
+            ))}
+          </select>
+          {ticker && (
+            <span
+              key={ticker.key}
+              className="xp-ticker"
+              onAnimationEnd={() => setTicker(null)}
+            >
+              +{ticker.amount} XP
+            </span>
+          )}
+        </div>
+
         <EditableField
           value={entry.url}
           onSave={(v) => handleFieldSave('url', v)}
           renderDisplay={(v) =>
             v ? (
               <a
-                className="job-link"
+                className="quest-link"
                 href={v}
                 title={v}
                 target="_blank"
                 rel="noreferrer noopener"
                 onClick={(e) => e.stopPropagation()}
               >
-                {linkLabel(v)} ↗
+                <ExternalLinkIcon />
               </a>
             ) : (
-              '—'
+              <span className="quest-link quest-link--empty" title="Click to add a link">
+                <ExternalLinkIcon />
+              </span>
             )
           }
         />
-      </td>
-      <td>
-        <select
-          className="status-select"
-          data-status={entry.status}
-          value={entry.status}
-          onChange={handleStatusChange}
-        >
-          {STATUS_OPTIONS.map((status) => (
-            <option key={status} value={status}>
-              {status[0].toUpperCase() + status.slice(1)}
-            </option>
-          ))}
-        </select>
-        {stale && (
-          <span className="stale-badge" title={`No update in ${daysSince(entry.lastUpdated)} days`}>
-            Stale · {daysSince(entry.lastUpdated)}d
-          </span>
-        )}
-      </td>
-      <td className="date-cell">{new Date(entry.dateAdded).toLocaleDateString()}</td>
-      <td className="date-cell">{new Date(entry.lastUpdated).toLocaleDateString()}</td>
-      <td>
+
         <button
           type="button"
-          className="delete-button"
+          className="quest-delete"
           onClick={handleDelete}
           aria-label={`Delete ${entry.role || 'entry'} at ${entry.company || 'unknown company'}`}
+          title="Delete"
         >
-          Delete
+          <XIcon />
         </button>
-      </td>
-    </tr>
+      </div>
+    </div>
   );
 }

@@ -6,7 +6,14 @@ import { AddEntryForm } from './AddEntryForm';
 import { BulkImportPanel } from './BulkImportPanel';
 import { StatsBar } from './StatsBar';
 import { GamificationPanel } from '../gamification/GamificationPanel';
+import { ShieldIcon, SettingsIcon } from '../components/icons';
 import './dashboard.css';
+
+function openOptionsPage() {
+  if (typeof chrome !== 'undefined' && chrome.runtime?.openOptionsPage) {
+    chrome.runtime.openOptionsPage();
+  }
+}
 
 export function Dashboard() {
   const [entries, setEntries] = useState<JobEntry[]>([]);
@@ -23,13 +30,25 @@ export function Dashboard() {
   }, [refresh]);
 
   return (
-    <div className="dashboard">
-      <header className="dashboard__header">
-        <div>
-          <h1 className="dashboard__title">SideQuest</h1>
-          <p className="dashboard__subtitle">
-            {entries.length} application{entries.length === 1 ? '' : 's'} tracked
-          </p>
+    <div className="wrap">
+      <header className="topbar">
+        <div className="brand">
+          <span className="brand-mark">
+            <ShieldIcon />
+          </span>
+          SideQuest
+        </div>
+        <div className="topbar-right">
+          <div className="eyebrow">Application Tracker</div>
+          <button
+            className="settings-btn"
+            type="button"
+            title="Reward loot table"
+            aria-label="Open reward loot table settings"
+            onClick={openOptionsPage}
+          >
+            <SettingsIcon />
+          </button>
         </div>
       </header>
 
@@ -37,18 +56,13 @@ export function Dashboard() {
 
       <StatsBar entries={entries} />
 
-      <section className="card">
-        <div className="card__header">
-          <h2 className="card__title">Applications</h2>
+      {loading ? (
+        <div className="empty-state" style={{ display: 'block' }}>
+          Loading…
         </div>
-        <div className="card__body" style={{ padding: 0 }}>
-          {loading ? (
-            <div className="job-row__empty">Loading…</div>
-          ) : (
-            <JobTable entries={entries} onChanged={refresh} />
-          )}
-        </div>
-      </section>
+      ) : (
+        <JobTable entries={entries} onChanged={refresh} />
+      )}
 
       <section className="card">
         <div className="card__header">
@@ -67,6 +81,10 @@ export function Dashboard() {
           <BulkImportPanel onImported={refresh} />
         </div>
       </section>
+
+      <footer className="foot">
+        SIDEQUEST v1 — {entries.length} QUEST{entries.length === 1 ? '' : 'S'} TRACKED
+      </footer>
     </div>
   );
 }

@@ -1,115 +1,174 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { getTreats, setTreats } from '../lib/storage';
+import { useEffect, useRef, useState } from 'react';
+import { getLootTable, setLootTable } from '../lib/storage';
+import type { LootTableEntry } from '../lib/types';
+import { PlusIcon, ShieldIcon, XIcon } from '../components/icons';
+import '../dashboard/dashboard.css';
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
 
 /**
- * Reward-wheel treat list editor. Loads the current treat list from
- * storage.getTreats() (which already seeds sensible defaults — see
- * DEFAULT_TREATS in src/lib/storage.ts), lets the user add/edit/remove
- * entries, and persists via storage.setTreats().
+ * Part D: Custom Admin Loot Table editor — the reward-wheel's weighted
+ * treat list. Ported from the mockup's admin-panel/loot-table markup
+ * (src/gamification/RewardDial.tsx reads this same table via
+ * pickWeightedTreat() in src/gamification/wheel.ts), reskinned to live on
+ * its own page here rather than an inline toggle panel, since this
+ * extension's Options page is already its own top-level surface (see
+ * manifest.config.ts's options_page) reached from the dashboard's gear
+ * icon via chrome.runtime.openOptionsPage().
  */
 export function Options() {
-  const [treats, setTreatsState] = useState<string[]>([]);
+  const [entries, setEntries] = useState<LootTableEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newTreat, setNewTreat] = useState('');
+  const [newLabel, setNewLabel] = useState('');
   const [status, setStatus] = useState<SaveStatus>('idle');
+  const idCounterRef = useRef(0);
+  const statusTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    getTreats().then((loaded) => {
-      setTreatsState(loaded);
+    getLootTable().then((loaded) => {
+      setEntries(loaded);
+      idCounterRef.current = loaded.length;
       setLoading(false);
     });
+    return () => {
+      if (statusTimeoutRef.current !== null) window.clearTimeout(statusTimeoutRef.current);
+    };
   }, []);
 
-  async function persist(next: string[]) {
-    setTreatsState(next);
+  async function persist(next: LootTableEntry[]) {
+    setEntries(next);
     setStatus('saving');
-    await setTreats(next);
+    await setLootTable(next);
     setStatus('saved');
-    setTimeout(() => setStatus('idle'), 1200);
+    if (statusTimeoutRef.current !== null) window.clearTimeout(statusTimeoutRef.current);
+    statusTimeoutRef.current = window.setTimeout(() => setStatus('idle'), 1200);
+  }
+
+  function updateField(id: string, updates: Partial<Omit<LootTableEntry, 'id'>>) {
+    persist(entries.map((entry) => (entry.id === id ? { ...entry, ...updates } : entry)));
+  }
+
+  function handleRemove(id: string) {
+    persist(entries.filter((entry) => entry.id !== id));
   }
 
   function handleAdd() {
-    const trimmed = newTreat.trim();
+    const trimmed = newLabel.trim();
     if (!trimmed) return;
-    persist([...treats, trimmed]);
-    setNewTreat('');
+    idCounterRef.current += 1;
+    persist([
+      ...entries,
+      { id: `custom-${idCounterRef.current}`, label: trimmed, tier: 'common', weight: 20 },
+    ]);
+    setNewLabel('');
   }
 
-  function handleRemove(index: number) {
-    persist(treats.filter((_, i) => i !== index));
-  }
-
-  function handleEdit(index: number, value: string) {
-    const next = treats.slice();
-    next[index] = value;
-    setTreatsState(next);
-  }
-
-  function handleEditCommit() {
-    // Persist current in-memory state (after an inline edit loses focus).
-    persist(treats);
-  }
+  const totalWeight = entries.reduce((sum, entry) => sum + entry.weight, 0) || 1;
 
   return (
-    <div style={styles.page}>
-      <h1 style={styles.title}>SideQuest Settings</h1>
-      <p style={styles.subtitle}>
-        Configure the treats your <strong>Quest Reward</strong> wheel can land on. These are
-        purely suggestions for yourself — nothing here books, buys, or sends anything.
-      </p>
+    <div className="wrap" style={{ maxWidth: 640 }}>
+      <header className="topbar">
+        <div className="brand">
+          <span className="brand-mark">
+            <ShieldIcon />
+          </span>
+          SideQuest Settings
+        </div>
+        <div className="eyebrow">Reward Loot Table</div>
+      </header>
 
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Reward Wheel Treats</h2>
+      <section className="admin-panel">
+        <div className="admin-header">
+          <h2>Reward Loot Table</h2>
+        </div>
+        <p className="admin-sub">
+          Weighted odds — the Reward Dial reads this table directly. Higher weight = more likely.
+        </p>
 
         {loading ? (
-          <p style={{ color: '#666' }}>Loading…</p>
+          <p style={{ color: 'var(--text-3)', fontSize: 12.5 }}>Loading…</p>
         ) : (
           <>
-            <ul style={styles.list}>
-              {treats.map((treat, index) => (
-                <li key={index} style={styles.listItem}>
-                  <input
-                    style={styles.input}
-                    value={treat}
-                    onChange={(e) => handleEdit(index, e.target.value)}
-                    onBlur={handleEditCommit}
-                    aria-label={`Treat ${index + 1}`}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleRemove(index)}
-                    style={styles.removeButton}
-                    aria-label={`Remove ${treat || 'treat'}`}
-                  >
-                    Remove
-                  </button>
-                </li>
-              ))}
-              {treats.length === 0 && (
-                <li style={styles.emptyState}>
-                  No treats yet — add one below so the wheel has something to land on.
-                </li>
+            <div className="loot-table">
+              <div className="loot-row head">
+                <div>Treat</div>
+                <div>Tier</div>
+                <div>Weight</div>
+                <div>Odds</div>
+                <div></div>
+              </div>
+              {entries.map((entry) => {
+                const pct = Math.round((entry.weight / totalWeight) * 100);
+                return (
+                  <div className="loot-row" key={entry.id}>
+                    <input
+                      className="loot-label-input"
+                      value={entry.label}
+                      onChange={(e) => updateField(entry.id, { label: e.target.value })}
+                      aria-label="Treat label"
+                    />
+                    <select
+                      className="tier-select"
+                      data-tier={entry.tier}
+                      value={entry.tier}
+                      onChange={(e) =>
+                        updateField(entry.id, { tier: e.target.value as LootTableEntry['tier'] })
+                      }
+                      aria-label="Rarity tier"
+                    >
+                      <option value="common">[COMMON]</option>
+                      <option value="rare">[RARE]</option>
+                      <option value="epic">[EPIC]</option>
+                    </select>
+                    <input
+                      type="number"
+                      className="loot-weight-input"
+                      min={1}
+                      value={entry.weight}
+                      onChange={(e) =>
+                        updateField(entry.id, { weight: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                      }
+                      aria-label="Weight"
+                    />
+                    <div className="loot-pct">{pct}%</div>
+                    <button
+                      className="loot-remove"
+                      type="button"
+                      onClick={() => handleRemove(entry.id)}
+                      aria-label={`Remove ${entry.label || 'treat'}`}
+                    >
+                      <XIcon />
+                    </button>
+                  </div>
+                );
+              })}
+              {entries.length === 0 && (
+                <div className="loot-row">
+                  <div style={{ color: 'var(--text-3)', fontSize: 12, gridColumn: '1 / -1' }}>
+                    No treats yet — add one below so the wheel has something to land on.
+                  </div>
+                </div>
               )}
-            </ul>
+            </div>
 
-            <div style={styles.addRow}>
+            <div className="admin-add-row">
               <input
-                style={styles.input}
-                placeholder="Add a new treat, e.g. Get boba"
-                value={newTreat}
-                onChange={(e) => setNewTreat(e.target.value)}
+                type="text"
+                placeholder="Add a new treat…"
+                value={newLabel}
+                onChange={(e) => setNewLabel(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleAdd();
                 }}
+                aria-label="New treat label"
               />
-              <button type="button" onClick={handleAdd} style={styles.addButton}>
+              <button className="btn-primary" type="button" onClick={handleAdd}>
+                <PlusIcon />
                 Add
               </button>
             </div>
 
-            <div style={styles.statusLine}>
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, minHeight: 14 }}>
               {status === 'saving' && 'Saving…'}
               {status === 'saved' && 'Saved.'}
             </div>
@@ -119,83 +178,3 @@ export function Options() {
     </div>
   );
 }
-
-const styles: Record<string, CSSProperties> = {
-  page: {
-    padding: 24,
-    fontFamily: 'system-ui, sans-serif',
-    color: '#1f1a3d',
-    maxWidth: 560,
-  },
-  title: {
-    marginBottom: 4,
-  },
-  subtitle: {
-    color: '#666',
-    fontSize: 13,
-    marginTop: 0,
-    marginBottom: 20,
-  },
-  section: {
-    marginBottom: 32,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    marginBottom: 10,
-  },
-  list: {
-    listStyle: 'none',
-    padding: 0,
-    margin: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-  },
-  listItem: {
-    display: 'flex',
-    gap: 8,
-    alignItems: 'center',
-  },
-  input: {
-    flex: 1,
-    padding: '8px 10px',
-    borderRadius: 6,
-    border: '1px solid #ddd',
-    fontSize: 13,
-  },
-  removeButton: {
-    padding: '8px 10px',
-    borderRadius: 6,
-    border: '1px solid #e0c6c6',
-    background: '#fff5f5',
-    color: '#a33',
-    cursor: 'pointer',
-    fontSize: 12,
-  },
-  addRow: {
-    display: 'flex',
-    gap: 8,
-    marginTop: 12,
-  },
-  addButton: {
-    padding: '8px 14px',
-    borderRadius: 6,
-    border: 'none',
-    background: '#4b2fb3',
-    color: '#fff',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 600,
-  },
-  statusLine: {
-    fontSize: 12,
-    color: '#888',
-    marginTop: 8,
-    minHeight: 16,
-  },
-  emptyState: {
-    fontSize: 12,
-    color: '#999',
-    fontStyle: 'italic',
-  },
-};

@@ -1,12 +1,24 @@
-import type { AppEvent, JobEntry } from './types';
+import type { AppEvent, JobEntry, LootTableEntry } from './types';
 
 const KEYS = {
   jobEntries: 'jobEntries',
   appEvents: 'appEvents',
-  treats: 'treats',
+  lootTable: 'lootTable',
 } as const;
 
-const DEFAULT_TREATS = ['Get boba', 'Watch an episode', 'Take the afternoon off'];
+/**
+ * Default weighted loot table, seeded the first time a user opens Options
+ * or spins the wheel. Weights are relative, not percentages — see
+ * pickWeightedTreat() in src/gamification/wheel.ts for how they're
+ * normalized into odds.
+ */
+const DEFAULT_LOOT_TABLE: LootTableEntry[] = [
+  { id: 'boba', label: 'Get boba', tier: 'common', weight: 40 },
+  { id: 'episode', label: 'Watch an episode', tier: 'common', weight: 35 },
+  { id: 'afternoon', label: 'Take the afternoon off', tier: 'rare', weight: 15 },
+  { id: 'daytrip', label: 'Plan a day trip', tier: 'epic', weight: 6 },
+  { id: 'splurge', label: 'Treat yourself to something nice', tier: 'epic', weight: 4 },
+];
 
 async function getLocal<T>(key: string, fallback: T): Promise<T> {
   const result = await chrome.storage.local.get(key);
@@ -94,10 +106,10 @@ export async function appendEvent(
 
 // Gamification settings
 
-export function getTreats(): Promise<string[]> {
-  return getLocal<string[]>(KEYS.treats, DEFAULT_TREATS);
+export function getLootTable(): Promise<LootTableEntry[]> {
+  return getLocal<LootTableEntry[]>(KEYS.lootTable, DEFAULT_LOOT_TABLE);
 }
 
-export function setTreats(treats: string[]): Promise<void> {
-  return setLocal(KEYS.treats, treats);
+export function setLootTable(entries: LootTableEntry[]): Promise<void> {
+  return setLocal(KEYS.lootTable, entries);
 }
