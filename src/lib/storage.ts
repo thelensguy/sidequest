@@ -17,16 +17,31 @@ async function setLocal<T>(key: string, value: T): Promise<void> {
   await chrome.storage.local.set({ [key]: value });
 }
 
+/** Single id generator so every JobEntry/AppEvent id is produced the same way. */
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+  // Fallback for environments without crypto.randomUUID (shouldn't happen in
+  // a real Chrome extension context, but keeps this safe to unit test anywhere).
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 // Job entries
 
 export function getJobEntries(): Promise<JobEntry[]> {
   return getLocal<JobEntry[]>(KEYS.jobEntries, []);
 }
 
-export async function addJobEntry(entry: JobEntry): Promise<void> {
+/** Generates an id automatically if the caller doesn't supply one. */
+export async function addJobEntry(
+  entry: Omit<JobEntry, 'id'> & { id?: string }
+): Promise<JobEntry> {
+  const full: JobEntry = { ...entry, id: entry.id ?? generateId() };
   const entries = await getJobEntries();
-  entries.push(entry);
+  entries.push(full);
   await setLocal(KEYS.jobEntries, entries);
+  return full;
 }
 
 export async function updateJobEntry(
@@ -40,16 +55,41 @@ export async function updateJobEntry(
   await setLocal(KEYS.jobEntries, next);
 }
 
+/**
+ * Removes a JobEntry and every AppEvent logged against it. Cascading the
+ * delete (rather than leaving orphaned events behind) matters because XP,
+ * levels, and badges are derived from the event log — a bad capture left
+ * un-cleaned would keep silently contributing XP after the entry itself
+ * is gone.
+ */
+export async function deleteJobEntry(id: string): Promise<void> {
+  const entries = await getJobEntries();
+  await setLocal(
+    KEYS.jobEntries,
+    entries.filter((entry) => entry.id !== id)
+  );
+  const events = await getEvents();
+  await setLocal(
+    KEYS.appEvents,
+    events.filter((event) => event.jobEntryId !== id)
+  );
+}
+
 // Event log
 
 export function getEvents(): Promise<AppEvent[]> {
   return getLocal<AppEvent[]>(KEYS.appEvents, []);
 }
 
-export async function appendEvent(event: AppEvent): Promise<void> {
+/** Generates an id automatically if the caller doesn't supply one. */
+export async function appendEvent(
+  event: Omit<AppEvent, 'id'> & { id?: string }
+): Promise<AppEvent> {
+  const full: AppEvent = { ...event, id: event.id ?? generateId() };
   const events = await getEvents();
-  events.push(event);
+  events.push(full);
   await setLocal(KEYS.appEvents, events);
+  return full;
 }
 
 // Gamification settings

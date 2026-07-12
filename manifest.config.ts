@@ -11,4 +11,15 @@ export default defineManifest({
   },
   options_page: 'src/options/index.html',
   permissions: ['storage', 'activeTab', 'scripting'],
+  content_scripts: [
+    {
+      matches: [
+        '*://*.linkedin.com/*',
+        '*://*.indeed.com/*',
+        '*://*.ziprecruiter.com/*',
+      ],
+      js: ['src/content/index.tsx'],
+      run_at: 'document_idle',
+    },
+  ],
 });
