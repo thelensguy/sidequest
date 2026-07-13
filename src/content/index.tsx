@@ -28,8 +28,9 @@ function mount() {
   // shielded by the shadow boundary the way its children are.
   host.style.position = 'fixed';
   host.style.zIndex = '2147483647';
-  host.style.bottom = '20px';
-  host.style.right = '20px';
+  host.style.top = '50%';
+  host.style.right = '0';
+  host.style.transform = 'translateY(-50%)';
   document.body.appendChild(host);
 
   const shadowRoot = host.attachShadow({ mode: 'open' });
