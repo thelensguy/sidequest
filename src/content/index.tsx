@@ -10,14 +10,36 @@ import { ContentApp } from './ContentApp';
 // meant to avoid. Inlining it lets us hand the string to our own <style>
 // element inside the shadow root instead.
 import contentStyles from './content.css?inline';
+import { getBubbleSettings, isBubbleHiddenUntilRestart } from '../lib/storage';
+import { getCurrentCaptureSite } from './currentSite';
 
 const HOST_ID = 'sidequest-content-host';
 
-function mount() {
+async function mount() {
   // Guard against double-mounting. MV3 content scripts normally inject
   // once per real navigation, but this keeps things safe against dev/HMR
   // reloads or any future manifest change that could re-run this entry
   // point against a page that already has one.
+  if (document.getElementById(HOST_ID)) return;
+
+  // isBubbleHiddenUntilRestart() touches chrome.storage.session, which
+  // needs the background service worker to have widened its access level
+  // (see src/background/index.ts) before a content script can use it at
+  // all. If that hasn't happened yet for any reason — extension just
+  // updated and the service worker hasn't run, an older Chrome, etc. —
+  // this must not take the whole bubble down with it; fall back to "not
+  // session-hidden" and keep going instead of leaving the page with no
+  // bubble at all.
+  const [settings, hiddenUntilRestart] = await Promise.all([
+    getBubbleSettings(),
+    isBubbleHiddenUntilRestart().catch(() => false),
+  ]);
+  const site = getCurrentCaptureSite();
+  const hiddenOnThisSite = site !== null && settings.hiddenDomains.includes(site);
+  if (hiddenUntilRestart || settings.hiddenGlobally || hiddenOnThisSite) return;
+
+  // Re-check after the awaits above — unlike the synchronous version this
+  // replaced, another invocation now has a window to mount first.
   if (document.getElementById(HOST_ID)) return;
 
   const host = document.createElement('div');
@@ -28,7 +50,7 @@ function mount() {
   // shielded by the shadow boundary the way its children are.
   host.style.position = 'fixed';
   host.style.zIndex = '2147483647';
-  host.style.top = '50%';
+  host.style.top = `${settings.verticalPercent}%`;
   host.style.right = '0';
   host.style.transform = 'translateY(-50%)';
   document.body.appendChild(host);
@@ -46,7 +68,7 @@ function mount() {
 
   createRoot(mountPoint).render(
     <React.StrictMode>
-      <ContentApp />
+      <ContentApp host={host} />
     </React.StrictMode>
   );
 }
@@ -87,7 +109,7 @@ function promoteAboveNativeModals(host: HTMLElement) {
 }
 
 if (document.body) {
-  mount();
+  void mount();
 } else {
-  document.addEventListener('DOMContentLoaded', mount, { once: true });
+  document.addEventListener('DOMContentLoaded', () => void mount(), { once: true });
 }

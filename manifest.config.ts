@@ -22,6 +22,10 @@ export default defineManifest({
     },
   },
   options_page: 'src/options/index.html',
+  background: {
+    service_worker: 'src/background/index.ts',
+    type: 'module',
+  },
   permissions: ['storage', 'activeTab', 'scripting'],
   content_scripts: [
     {

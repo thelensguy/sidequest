@@ -41,3 +41,16 @@ export interface LootTableEntry {
   tier: 'common' | 'rare' | 'epic';
   weight: number;
 }
+
+/** The three sites the in-page capture bubble runs on — see manifest.config.ts's content_scripts matches. */
+export type CaptureSite = 'linkedin' | 'indeed' | 'ziprecruiter';
+
+/** Persisted state for the in-page floating capture bubble: where it sits, and where/whether it's hidden. */
+export interface BubbleSettings {
+  /** Vertical position as a percentage from the top of the viewport, clamped 5-95. Shared across all sites. */
+  verticalPercent: number;
+  /** Sites where the bubble is hidden until re-enabled from Options. */
+  hiddenDomains: CaptureSite[];
+  /** Hidden on every site, independent of hiddenDomains. */
+  hiddenGlobally: boolean;
+}

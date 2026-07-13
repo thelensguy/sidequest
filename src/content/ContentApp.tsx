@@ -1,12 +1,20 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Bubble } from './Bubble';
 import { ReviewPanel } from './ReviewPanel';
 import { safeExtract } from './extract';
 import { getFieldStatuses, type FieldStatuses } from './fieldStatus';
 import { getAdapterForUrl } from '../capture/adapters';
 import type { ExtractedJob } from '../capture/adapters';
-import { addJobEntry, appendEvent } from '../lib/storage';
+import {
+  addJobEntry,
+  appendEvent,
+  hideBubbleUntilRestart,
+  setBubbleHiddenOnDomain,
+  setBubbleSettings,
+} from '../lib/storage';
 import type { JobEntrySource } from '../lib/types';
+import { getCurrentCaptureSite } from './currentSite';
+import { percentFromClientY } from './bubblePosition';
 
 type PanelState =
   | { phase: 'closed' }
@@ -23,8 +31,17 @@ const EMPTY_DRAFT: ExtractedJob = { company: '', role: '', url: '' };
 /** How long the "Saved to SideQuest" confirmation stays up before the panel auto-closes. */
 const SAVED_AUTO_CLOSE_MS = 1400;
 
-export function ContentApp() {
+/** Minimum mouse movement (px) before a mousedown-drag counts as a drag rather than a click. */
+const DRAG_THRESHOLD_PX = 4;
+
+interface ContentAppProps {
+  /** The fixed-position host element created in index.tsx — mutated directly during drag for smoothness, no React re-render per pixel moved. */
+  host: HTMLElement;
+}
+
+export function ContentApp({ host }: ContentAppProps) {
   const [state, setState] = useState<PanelState>({ phase: 'closed' });
+  const [hidden, setHidden] = useState(false);
 
   // Synchronous re-entry guard, same rationale as Popup.tsx's isSavingRef:
   // React batches/defers setState, so without a ref a fast double-click
@@ -32,7 +49,17 @@ export function ContentApp() {
   // actually commits and disables the button.
   const isSavingRef = useRef(false);
 
+  // The browser fires a `click` after `mouseup` whenever both land on the
+  // same element, regardless of movement in between — so a real drag
+  // still triggers handleToggle right after. This flag, set only when a
+  // drag actually happened, tells handleToggle to swallow that one click.
+  const suppressClickRef = useRef(false);
+
   function handleToggle() {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     if (state.phase !== 'closed') {
       setState({ phase: 'closed' });
       return;
@@ -109,6 +136,60 @@ export function ContentApp() {
     }
   }
 
+  function handleDragStart(event: ReactMouseEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return; // left-click/primary pointer only
+    event.preventDefault();
+    const startY = event.clientY;
+    let dragging = false;
+
+    function handleMouseMove(moveEvent: MouseEvent) {
+      if (!dragging && Math.abs(moveEvent.clientY - startY) < DRAG_THRESHOLD_PX) return;
+      if (!dragging) {
+        dragging = true;
+        document.body.style.cursor = 'grabbing';
+      }
+      host.style.top = `${percentFromClientY(moveEvent.clientY, window.innerHeight)}%`;
+    }
+
+    function handleMouseUp(upEvent: MouseEvent) {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      if (!dragging) return;
+      document.body.style.cursor = '';
+      suppressClickRef.current = true;
+      const percent = percentFromClientY(upEvent.clientY, window.innerHeight);
+      host.style.top = `${percent}%`;
+      void setBubbleSettings({ verticalPercent: percent });
+    }
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }
+
+  // All three hide actions take effect immediately for this page view
+  // (setHidden(true) unmounts the bubble right now) in addition to
+  // persisting — the persisted setting is what a *future* page load reads
+  // via index.tsx's mount() to decide whether to render the bubble at
+  // all, but the user clicking "hide" shouldn't require a reload to see
+  // it disappear.
+  function handleHideUntilRestart() {
+    void hideBubbleUntilRestart();
+    setHidden(true);
+  }
+
+  function handleHideDomain() {
+    const site = getCurrentCaptureSite();
+    if (site) void setBubbleHiddenOnDomain(site, true);
+    setHidden(true);
+  }
+
+  function handleHideGlobally() {
+    void setBubbleSettings({ hiddenGlobally: true });
+    setHidden(true);
+  }
+
+  if (hidden) return null;
+
   const isOpen = state.phase !== 'closed';
 
   return (
@@ -124,7 +205,14 @@ export function ContentApp() {
           onCancel={handleCancel}
         />
       )}
-      <Bubble isOpen={isOpen} onClick={handleToggle} />
+      <Bubble
+        isOpen={isOpen}
+        onClick={handleToggle}
+        onDragStart={handleDragStart}
+        onHideUntilRestart={handleHideUntilRestart}
+        onHideDomain={handleHideDomain}
+        onHideGlobally={handleHideGlobally}
+      />
     </div>
   );
 }

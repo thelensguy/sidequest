@@ -1,10 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
-import { getLootTable, setLootTable } from '../lib/storage';
-import type { LootTableEntry } from '../lib/types';
+import {
+  getBubbleSettings,
+  getLootTable,
+  setBubbleHiddenOnDomain,
+  setBubbleSettings,
+  setLootTable,
+} from '../lib/storage';
+import type { BubbleSettings, CaptureSite, LootTableEntry } from '../lib/types';
 import { PlusIcon, ShieldIcon, XIcon } from '../components/icons';
 import '../dashboard/dashboard.css';
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
+
+const CAPTURE_SITE_LABELS: { site: CaptureSite; label: string }[] = [
+  { site: 'linkedin', label: 'LinkedIn' },
+  { site: 'indeed', label: 'Indeed' },
+  { site: 'ziprecruiter', label: 'ZipRecruiter' },
+];
 
 /**
  * Part D: Custom Admin Loot Table editor — the reward-wheel's weighted
@@ -24,16 +36,40 @@ export function Options() {
   const idCounterRef = useRef(0);
   const statusTimeoutRef = useRef<number | null>(null);
 
+  const [bubbleSettings, setBubbleSettingsState] = useState<BubbleSettings | null>(null);
+  const [bubbleStatus, setBubbleStatus] = useState<SaveStatus>('idle');
+  const bubbleStatusTimeoutRef = useRef<number | null>(null);
+
   useEffect(() => {
     getLootTable().then((loaded) => {
       setEntries(loaded);
       idCounterRef.current = loaded.length;
       setLoading(false);
     });
+    getBubbleSettings().then(setBubbleSettingsState);
     return () => {
       if (statusTimeoutRef.current !== null) window.clearTimeout(statusTimeoutRef.current);
+      if (bubbleStatusTimeoutRef.current !== null) window.clearTimeout(bubbleStatusTimeoutRef.current);
     };
   }, []);
+
+  function flashBubbleSaved() {
+    setBubbleStatus('saved');
+    if (bubbleStatusTimeoutRef.current !== null) window.clearTimeout(bubbleStatusTimeoutRef.current);
+    bubbleStatusTimeoutRef.current = window.setTimeout(() => setBubbleStatus('idle'), 1200);
+  }
+
+  async function handleToggleGlobal(hiddenGlobally: boolean) {
+    setBubbleStatus('saving');
+    setBubbleSettingsState(await setBubbleSettings({ hiddenGlobally }));
+    flashBubbleSaved();
+  }
+
+  async function handleToggleSite(site: CaptureSite, hidden: boolean) {
+    setBubbleStatus('saving');
+    setBubbleSettingsState(await setBubbleHiddenOnDomain(site, hidden));
+    flashBubbleSaved();
+  }
 
   async function persist(next: LootTableEntry[]) {
     setEntries(next);
@@ -171,6 +207,56 @@ export function Options() {
             <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, minHeight: 14 }}>
               {status === 'saving' && 'Saving…'}
               {status === 'saved' && 'Saved.'}
+            </div>
+          </>
+        )}
+      </section>
+
+      <section className="admin-panel">
+        <div className="admin-header">
+          <h2>Capture Bubble</h2>
+        </div>
+        <p className="admin-sub">
+          The floating save button that appears on LinkedIn, Indeed, and ZipRecruiter — reverses
+          anything hidden from the bubble's own dismiss menu.
+        </p>
+
+        {bubbleSettings === null ? (
+          <p style={{ color: 'var(--text-3)', fontSize: 12.5 }}>Loading…</p>
+        ) : (
+          <>
+            <div className="toggle-row">
+              <span className="toggle-row-label">Show on all sites</span>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={!bubbleSettings.hiddenGlobally}
+                  onChange={(e) => handleToggleGlobal(!e.target.checked)}
+                  aria-label="Show capture bubble on all sites"
+                />
+                <span className="toggle-switch-track" />
+              </label>
+            </div>
+
+            {CAPTURE_SITE_LABELS.map(({ site, label }) => (
+              <div className="toggle-row" key={site}>
+                <span className="toggle-row-label">{label}</span>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={!bubbleSettings.hiddenDomains.includes(site)}
+                    disabled={bubbleSettings.hiddenGlobally}
+                    onChange={(e) => handleToggleSite(site, !e.target.checked)}
+                    aria-label={`Show capture bubble on ${label}`}
+                  />
+                  <span className="toggle-switch-track" />
+                </label>
+              </div>
+            ))}
+
+            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, minHeight: 14 }}>
+              {bubbleStatus === 'saving' && 'Saving…'}
+              {bubbleStatus === 'saved' && 'Saved.'}
             </div>
           </>
         )}

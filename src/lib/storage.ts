@@ -1,10 +1,21 @@
-import type { AppEvent, JobEntry, LootTableEntry } from './types';
+import type { AppEvent, BubbleSettings, CaptureSite, JobEntry, LootTableEntry } from './types';
 
 const KEYS = {
   jobEntries: 'jobEntries',
   appEvents: 'appEvents',
   lootTable: 'lootTable',
+  bubbleSettings: 'bubbleSettings',
 } as const;
+
+const SESSION_KEYS = {
+  bubbleHiddenUntilRestart: 'bubbleHiddenUntilRestart',
+} as const;
+
+const DEFAULT_BUBBLE_SETTINGS: BubbleSettings = {
+  verticalPercent: 50,
+  hiddenDomains: [],
+  hiddenGlobally: false,
+};
 
 /**
  * Default weighted loot table, seeded the first time a user opens Options
@@ -27,6 +38,21 @@ async function getLocal<T>(key: string, fallback: T): Promise<T> {
 
 async function setLocal<T>(key: string, value: T): Promise<void> {
   await chrome.storage.local.set({ [key]: value });
+}
+
+/**
+ * chrome.storage.session (not .local) — cleared when the browser fully
+ * restarts, which is exactly the lifecycle "hide until next visit" needs:
+ * it should survive a page refresh or opening a new tab, but shouldn't
+ * require a trip to Options to come back.
+ */
+async function getSession<T>(key: string, fallback: T): Promise<T> {
+  const result = await chrome.storage.session.get(key);
+  return (result[key] as T) ?? fallback;
+}
+
+async function setSession<T>(key: string, value: T): Promise<void> {
+  await chrome.storage.session.set({ [key]: value });
 }
 
 /** Single id generator so every JobEntry/AppEvent id is produced the same way. */
@@ -112,4 +138,47 @@ export function getLootTable(): Promise<LootTableEntry[]> {
 
 export function setLootTable(entries: LootTableEntry[]): Promise<void> {
   return setLocal(KEYS.lootTable, entries);
+}
+
+// Capture bubble settings
+
+export function getBubbleSettings(): Promise<BubbleSettings> {
+  return getLocal<BubbleSettings>(KEYS.bubbleSettings, DEFAULT_BUBBLE_SETTINGS);
+}
+
+/** Merges partial updates onto the current settings — callers only pass what changed. */
+export async function setBubbleSettings(
+  updates: Partial<BubbleSettings>
+): Promise<BubbleSettings> {
+  const current = await getBubbleSettings();
+  const next = { ...current, ...updates };
+  await setLocal(KEYS.bubbleSettings, next);
+  return next;
+}
+
+/**
+ * Adds or removes a single site from hiddenDomains without the caller
+ * having to read the current array first — used both by the bubble's own
+ * hide menu (hidden: true) and the Options page toggles that reverse it
+ * (hidden: false).
+ */
+export async function setBubbleHiddenOnDomain(
+  site: CaptureSite,
+  hidden: boolean
+): Promise<BubbleSettings> {
+  const current = await getBubbleSettings();
+  const hiddenDomains = hidden
+    ? current.hiddenDomains.includes(site)
+      ? current.hiddenDomains
+      : [...current.hiddenDomains, site]
+    : current.hiddenDomains.filter((s) => s !== site);
+  return setBubbleSettings({ hiddenDomains });
+}
+
+export function isBubbleHiddenUntilRestart(): Promise<boolean> {
+  return getSession<boolean>(SESSION_KEYS.bubbleHiddenUntilRestart, false);
+}
+
+export function hideBubbleUntilRestart(): Promise<void> {
+  return setSession(SESSION_KEYS.bubbleHiddenUntilRestart, true);
 }
