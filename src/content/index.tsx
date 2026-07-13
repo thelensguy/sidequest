@@ -33,6 +33,8 @@ function mount() {
   host.style.transform = 'translateY(-50%)';
   document.body.appendChild(host);
 
+  promoteAboveNativeModals(host);
+
   const shadowRoot = host.attachShadow({ mode: 'open' });
 
   const style = document.createElement('style');
@@ -47,6 +49,41 @@ function mount() {
       <ContentApp />
     </React.StrictMode>
   );
+}
+
+/**
+ * A high z-index only wins within the normal DOM stacking hierarchy — it
+ * can't beat the browser's "top layer" (native <dialog>, fullscreen
+ * elements, and Popover-API elements), which always paints above regular
+ * content no matter its z-index. Job sites frequently build their "view
+ * posting" panel as a full-viewport <dialog>, which was silently covering
+ * the bubble even at z-index 2147483647. Joining the top layer ourselves
+ * (via the same Popover API) is the only way to actually stay above one.
+ *
+ * Elements stack within the top layer in the order they were shown, most
+ * recent on top — so a <dialog> opened *after* we first show our popover
+ * would still end up above us. The MutationObserver below re-bumps our
+ * popover (hide, then show again) whenever the page's DOM changes, which
+ * covers a modal mounting after us without needing to know that specific
+ * site's markup.
+ */
+function promoteAboveNativeModals(host: HTMLElement) {
+  if (typeof host.showPopover !== 'function') return; // unsupported browser: no-op, z-index-only behavior unchanged
+
+  host.setAttribute('popover', 'manual');
+  host.showPopover();
+
+  let rebumpTimer: ReturnType<typeof setTimeout> | undefined;
+  const observer = new MutationObserver(() => {
+    // Debounce: a modal mounting touches many nodes in one burst: only
+    // re-bump once per burst, not once per mutated node.
+    if (rebumpTimer !== undefined) clearTimeout(rebumpTimer);
+    rebumpTimer = setTimeout(() => {
+      if (host.matches(':popover-open')) host.hidePopover();
+      host.showPopover();
+    }, 150);
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
 }
 
 if (document.body) {

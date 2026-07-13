@@ -5,7 +5,7 @@ export type ApplicationStatus =
   | 'rejected'
   | 'offer';
 
-export type JobEntrySource = 'linkedin' | 'indeed' | 'generic' | 'manual' | 'import';
+export type JobEntrySource = 'linkedin' | 'indeed' | 'ziprecruiter' | 'generic' | 'manual' | 'import';
 
 export interface JobEntry {
   id: string;
