@@ -1,19 +1,11 @@
-import type { ApplicationStatus } from '../lib/types';
+import { STATUS_ORDER, type ApplicationStatus } from '../lib/types';
 import type { NewJobEntryInput } from './createEntry';
-import { localDateOnlyToIso } from './dateUtils';
-import { validateJobUrl } from './urlValidation';
-
-const STATUS_VALUES: ApplicationStatus[] = [
-  'saved',
-  'applied',
-  'interviewing',
-  'rejected',
-  'offer',
-];
+import { localDateOnlyToIso } from '../lib/dateUtils';
+import { validateJobUrl } from '../lib/urlValidation';
 
 function normalizeStatus(raw: string): ApplicationStatus | null {
   const normalized = raw.trim().toLowerCase();
-  return STATUS_VALUES.includes(normalized as ApplicationStatus)
+  return STATUS_ORDER.includes(normalized as ApplicationStatus)
     ? (normalized as ApplicationStatus)
     : null;
 }
@@ -84,7 +76,7 @@ export function parseBulkImport(text: string): ParseImportResult {
       errors.push({
         line: lineNumber,
         raw: line,
-        message: `Unrecognized status "${statusRaw}" — expected one of ${STATUS_VALUES.join(', ')}`,
+        message: `Unrecognized status "${statusRaw}" — expected one of ${STATUS_ORDER.join(', ')}`,
       });
       return;
     }

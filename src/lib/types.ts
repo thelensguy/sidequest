@@ -5,7 +5,26 @@ export type ApplicationStatus =
   | 'rejected'
   | 'offer';
 
+/** Canonical display/validation order — the single source of truth every status dropdown, filter, and importer reads from. */
+export const STATUS_ORDER: ApplicationStatus[] = [
+  'saved',
+  'applied',
+  'interviewing',
+  'rejected',
+  'offer',
+];
+
 export type JobEntrySource = 'linkedin' | 'indeed' | 'ziprecruiter' | 'generic' | 'manual' | 'import';
+
+/** Every valid JobEntrySource — the runtime counterpart to the type above, for validating untrusted data (e.g. an imported file). */
+export const JOB_ENTRY_SOURCES: JobEntrySource[] = [
+  'linkedin',
+  'indeed',
+  'ziprecruiter',
+  'generic',
+  'manual',
+  'import',
+];
 
 export interface JobEntry {
   id: string;
@@ -21,6 +40,9 @@ export interface JobEntry {
 }
 
 export type AppEventType = 'capture' | 'status_change' | 'manual_add' | 'import';
+
+/** Every valid AppEventType — the runtime counterpart to the type above, for validating untrusted data (e.g. an imported file). */
+export const APP_EVENT_TYPES: AppEventType[] = ['capture', 'status_change', 'manual_add', 'import'];
 
 export interface AppEvent {
   id: string;
@@ -54,3 +76,6 @@ export interface BubbleSettings {
   /** Hidden on every site, independent of hiddenDomains. */
   hiddenGlobally: boolean;
 }
+
+/** Dashboard/Options color theme — dark is the original design, light is the WCAG AA-checked counterpart. */
+export type ThemePreference = 'dark' | 'light';

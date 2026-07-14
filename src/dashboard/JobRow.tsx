@@ -1,13 +1,13 @@
 import { useState } from 'react';
-import type { ApplicationStatus, JobEntry } from '../lib/types';
+import { STATUS_ORDER, type ApplicationStatus, type JobEntry } from '../lib/types';
 import { appendEvent, deleteJobEntry, getEvents, updateJobEntry } from '../lib/storage';
 import { computeXp } from '../gamification/xp';
 import { isStale, daysSince } from './staleness';
 import { EditableField } from './EditableField';
-import { validateJobUrl } from './urlValidation';
-import { formatMetaDateRange } from './dateUtils';
+import { validateJobUrl } from '../lib/urlValidation';
+import { formatMetaDateRange } from '../lib/dateUtils';
 import { ExternalLinkIcon, XIcon } from '../components/icons';
-import { STATUS_ICON, STATUS_ORDER, STATUS_TAG_LABEL } from './statusMeta';
+import { STATUS_ICON, STATUS_TAG_LABEL } from './statusMeta';
 
 function linkHost(url: string): string {
   try {

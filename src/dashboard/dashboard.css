@@ -18,7 +18,15 @@
   --text-3: #7c8695;
   --accent: #818cf8;
   --accent-fill: #6e7af0;
+  --accent-hover: #9aa3f9;
   --accent-dim: rgba(129, 140, 248, 0.1);
+  /* Text color for anything sitting directly on --accent (buttons) — dark
+     text reads on dark-mode's light-purple accent; light mode's accent is
+     darkened for AA text contrast elsewhere, so it needs light text instead. */
+  --btn-text: #0a0a0b;
+  /* Hover wash for menu/dropdown rows — lightens in dark mode, darkens in
+     light mode, since a white-tint overlay is invisible on a light surface. */
+  --hover-overlay: rgba(255, 255, 255, 0.04);
 
   --s-saved: #8a93a0;
   --s-applied: #5b8def;
@@ -31,6 +39,36 @@
     -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Helvetica, Arial, sans-serif;
 
   --radius: 10px;
+}
+
+/*
+ * Light theme — WCAG AA-checked overrides (4.5:1 minimum for every color
+ * used as text, verified against both --bg and --surface/white). Same
+ * mechanism this app already uses for [data-status="…"] tinting: an
+ * attribute on a parent element controls the token values below it, rather
+ * than a second class or inline styles. Applied to <html> by useTheme().
+ */
+:root[data-theme='light'] {
+  --bg: #f4f4f6;
+  --surface: #ffffff;
+  --surface-raised: #fbfbfd;
+  --border: #dcdce2;
+  --border-subtle: #ececf1;
+  --text: #17171a;
+  --text-2: #52525b;
+  --text-3: #6b6b76;
+  --accent: #4f46e5;
+  --accent-fill: #4338ca;
+  --accent-hover: #4640d0;
+  --accent-dim: rgba(79, 70, 229, 0.1);
+  --btn-text: #ffffff;
+  --hover-overlay: rgba(0, 0, 0, 0.04);
+
+  --s-saved: #475569;
+  --s-applied: #2563eb;
+  --s-interviewing: #b45309;
+  --s-rejected: #b91c1c;
+  --s-offer: #047857;
 }
 
 * {
@@ -83,6 +121,11 @@ svg.i {
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.01em;
+}
+.brand h1 {
+  margin: 0;
+  font: inherit;
+  color: inherit;
 }
 .brand-mark {
   width: 22px;
@@ -338,9 +381,11 @@ svg.i {
   animation: goal-pulse-text 1.2s ease-in-out infinite;
 }
 @keyframes goal-pulse-text {
+  /* Floor is 0.85, not a deeper dip — var(--accent) blended below ~0.81
+     opacity over --surface drops under the 4.5:1 text-contrast minimum. */
   0%,
   100% {
-    opacity: 0.75;
+    opacity: 0.85;
   }
   50% {
     opacity: 1;
@@ -514,10 +559,12 @@ svg.i {
   padding: 2px 0;
   width: 100%;
 }
-.loot-label-input:hover,
-.loot-label-input:focus {
-  outline: none;
+.loot-label-input:hover {
   border-bottom-color: var(--border);
+}
+.loot-label-input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--accent);
 }
 .tier-select {
   appearance: none;
@@ -535,6 +582,12 @@ svg.i {
   background-repeat: no-repeat;
   background-position: right 4px center;
   background-size: 9px;
+}
+/* CSS custom properties can't be used inside a background-image data URI,
+   so the chevron's stroke color needs its own light-mode override baked in
+   (matching light mode's --text-3, #6b6b76). */
+:root[data-theme='light'] .tier-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B6B76' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
 }
 .tier-select[data-tier='common'] {
   color: var(--text-2);
@@ -809,7 +862,13 @@ svg.i {
   color: var(--text-3);
 }
 
-.status-filter {
+.status-filter-dropdown {
+  position: relative;
+}
+.status-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
@@ -819,14 +878,59 @@ svg.i {
   border-radius: 7px;
   padding: 8px 10px;
   cursor: pointer;
+  white-space: nowrap;
 }
-.status-filter:focus {
+.status-filter-trigger:hover {
+  border-color: var(--text-3);
+}
+.status-filter-trigger:focus-visible {
   outline: none;
   border-color: var(--accent);
 }
-.status-filter option {
+.status-filter-trigger svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-3);
+}
+.status-filter-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 180px;
   background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.status-filter-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--sans);
+  font-size: 12.5px;
   color: var(--text);
+  padding: 7px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.status-filter-option:hover {
+  background: var(--hover-overlay);
+}
+.status-filter-option input[type='checkbox'] {
+  accent-color: var(--accent);
+  width: 14px;
+  height: 14px;
+  cursor: pointer;
+}
+.status-filter-option-all {
+  font-weight: 600;
+}
+.status-filter-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 2px;
 }
 
 .btn-primary {
@@ -836,7 +940,7 @@ svg.i {
   font-family: var(--sans);
   font-weight: 600;
   font-size: 12.5px;
-  color: #0a0a0b;
+  color: var(--btn-text);
   background: var(--accent);
   border: 1px solid var(--accent);
   padding: 8px 14px;
@@ -846,7 +950,7 @@ svg.i {
   white-space: nowrap;
 }
 .btn-primary:hover {
-  background: #9aa3f9;
+  background: var(--accent-hover);
 }
 .btn-primary:active {
   background: var(--accent-fill);
@@ -965,10 +1069,15 @@ svg.i {
   background-size: 9px;
   color: inherit;
 }
-.status-select:hover,
-.status-select:focus {
-  outline: none;
+:root[data-theme='light'] .status-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%236B6B76' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+}
+.status-select:hover {
   border-bottom-color: var(--border);
+}
+.status-select:focus-visible {
+  outline: none;
+  border-bottom-color: var(--accent);
 }
 .status-select option {
   background: var(--surface-raised);
@@ -1192,11 +1301,11 @@ footer.foot {
   padding: 8px 16px;
   cursor: pointer;
   background: var(--accent);
-  color: #0a0a0b;
+  color: var(--btn-text);
   white-space: nowrap;
 }
 .btn:hover {
-  background: #9aa3f9;
+  background: var(--accent-hover);
 }
 .btn:disabled {
   background: var(--border);

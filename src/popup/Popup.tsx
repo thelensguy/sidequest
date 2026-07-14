@@ -3,7 +3,8 @@ import { type ActiveTabInfo, captureFromTab, getActiveTab, isCompleteJob } from 
 import type { ExtractedJob } from '../capture/adapters';
 import { addJobEntry, appendEvent } from '../lib/storage';
 import type { AppEventType, JobEntry, JobEntrySource } from '../lib/types';
-import { CheckCircleIcon, ShieldIcon, XCircleIcon } from '../components/icons';
+import { validateJobUrl } from '../lib/urlValidation';
+import { CheckCircleIcon, ExternalLinkIcon, ShieldIcon, XCircleIcon } from '../components/icons';
 
 type ViewState =
   | { phase: 'idle' }
@@ -50,6 +51,7 @@ async function saveEntry(
 export function Popup() {
   const [state, setState] = useState<ViewState>({ phase: 'idle' });
   const [draft, setDraft] = useState<ExtractedJob>(EMPTY_DRAFT);
+  const [manualUrlError, setManualUrlError] = useState<string | null>(null);
 
   // Synchronous re-entry guard for both save paths. A `disabled` prop on
   // the button (or checking `state.phase` inside the handler) isn't
@@ -80,12 +82,21 @@ export function Popup() {
       };
 
       if (isCompleteJob(job)) {
-        const entry = await saveEntry(job, source, 'capture');
-        setState({ phase: 'saved', entry });
-        // Stay locked: the primary button is hidden once phase is
-        // 'saved', and handleReset() clears the guard when the user
-        // moves on via "Capture another".
-        return;
+        // Same http(s)-only rule as every other save path (manual form,
+        // dashboard add/import/edit) — a captured `url` comes straight
+        // off third-party page DOM and is later rendered as a live
+        // clickable href in JobRow, so it needs the same validation an
+        // adapter can't guarantee on its own (e.g. the generic fallback
+        // just echoes `doc.location.href`).
+        const safeUrl = validateJobUrl(job.url);
+        if (safeUrl !== null) {
+          const entry = await saveEntry({ ...job, url: safeUrl }, source, 'capture');
+          setState({ phase: 'saved', entry });
+          // Stay locked: the primary button is hidden once phase is
+          // 'saved', and handleReset() clears the guard when the user
+          // moves on via "Capture another".
+          return;
+        }
       }
 
       // Incomplete or failed extraction — prefill whatever we did get
@@ -111,9 +122,21 @@ export function Popup() {
     if (!draft.company.trim() || !draft.role.trim() || !draft.url.trim()) {
       return;
     }
+
+    // Same http(s)-only rule as the dashboard's add/import/edit paths —
+    // this field is free text the user (or a URL pasted from elsewhere)
+    // fills in, and it's later rendered as a live clickable href in
+    // JobRow, so a `javascript:...` value can't be allowed through here.
+    const safeUrl = validateJobUrl(draft.url);
+    if (safeUrl === null) {
+      setManualUrlError('Link must be a valid http(s) URL.');
+      return;
+    }
+    setManualUrlError(null);
+
     isSavingRef.current = true;
     try {
-      const entry = await saveEntry(draft, 'manual', 'manual_add');
+      const entry = await saveEntry({ ...draft, url: safeUrl }, 'manual', 'manual_add');
       setState({ phase: 'saved', entry });
     } catch (err) {
       setState({
@@ -127,7 +150,12 @@ export function Popup() {
   function handleReset() {
     isSavingRef.current = false;
     setDraft(EMPTY_DRAFT);
+    setManualUrlError(null);
     setState({ phase: 'idle' });
+  }
+
+  function openDashboard() {
+    chrome.tabs.create({ url: chrome.runtime.getURL('src/dashboard/index.html') });
   }
 
   return (
@@ -140,6 +168,15 @@ export function Popup() {
           <h1 style={styles.heading}>SideQuest</h1>
           <p style={styles.eyebrow}>Capture</p>
         </div>
+        <button
+          type="button"
+          style={styles.dashboardButton}
+          title="Open dashboard"
+          aria-label="Open dashboard"
+          onClick={openDashboard}
+        >
+          <ExternalLinkIcon />
+        </button>
       </div>
 
       {state.phase !== 'manual' && state.phase !== 'saved' && (
@@ -154,14 +191,14 @@ export function Popup() {
       )}
 
       {state.phase === 'saved' && (
-        <p style={styles.success}>
+        <p style={styles.success} role="status">
           <CheckCircleIcon style={styles.statusIcon} />
           Saved &ldquo;{state.entry.role}&rdquo; at {state.entry.company || '(unknown company)'}.
         </p>
       )}
 
       {state.phase === 'error' && (
-        <p style={styles.error}>
+        <p style={styles.error} role="alert">
           <XCircleIcon style={styles.statusIcon} />
           {state.message}
         </p>
@@ -198,10 +235,19 @@ export function Popup() {
             <input
               style={styles.input}
               value={draft.url}
-              onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
+              onChange={(e) => {
+                setDraft((d) => ({ ...d, url: e.target.value }));
+                setManualUrlError(null);
+              }}
               required
             />
           </label>
+          {manualUrlError && (
+            <p style={styles.error} role="alert">
+              <XCircleIcon style={styles.statusIcon} />
+              {manualUrlError}
+            </p>
+          )}
 
           <div style={styles.formActions}>
             <button type="submit" style={styles.primaryButton}>
@@ -264,6 +310,21 @@ const styles: Record<string, CSSProperties> = {
     justifyContent: 'center',
     color: theme.accent,
     fontSize: 14,
+    flexShrink: 0,
+  },
+  dashboardButton: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    background: theme.surface,
+    border: `1px solid ${theme.border}`,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: theme.text3,
+    fontSize: 14,
+    cursor: 'pointer',
+    marginLeft: 'auto',
     flexShrink: 0,
   },
   heading: { fontSize: 14, fontWeight: 600, margin: 0, letterSpacing: '-0.01em' },

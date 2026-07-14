@@ -1,13 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   getBubbleSettings,
+  getEvents,
+  getJobEntries,
   getLootTable,
   setBubbleHiddenOnDomain,
   setBubbleSettings,
+  setEvents,
+  setJobEntries,
   setLootTable,
 } from '../lib/storage';
+import { validateExportData } from '../lib/importExport';
 import type { BubbleSettings, CaptureSite, LootTableEntry } from '../lib/types';
+import { todayLocalDateString } from '../lib/dateUtils';
+import { useTheme } from '../lib/useTheme';
 import { PlusIcon, ShieldIcon, XIcon } from '../components/icons';
+import { BulkImportPanel } from './BulkImportPanel';
 import '../dashboard/dashboard.css';
 
 type SaveStatus = 'idle' | 'saving' | 'saved';
@@ -17,6 +25,47 @@ const CAPTURE_SITE_LABELS: { site: CaptureSite; label: string }[] = [
   { site: 'indeed', label: 'Indeed' },
   { site: 'ziprecruiter', label: 'ZipRecruiter' },
 ];
+
+/** Shared "saving…/saved." status used by all three sections below — flash() marks 'saved' and auto-clears back to 'idle' after 1.2s. */
+function useFlashStatus() {
+  const [status, setStatus] = useState<SaveStatus>('idle');
+  const timeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  function flash() {
+    setStatus('saved');
+    if (timeoutRef.current !== null) window.clearTimeout(timeoutRef.current);
+    timeoutRef.current = window.setTimeout(() => setStatus('idle'), 1200);
+  }
+
+  return { status, setStatus, flash };
+}
+
+function StatusLine({
+  status,
+  savingLabel,
+  savedLabel,
+}: {
+  status: SaveStatus;
+  savingLabel: string;
+  savedLabel: string;
+}) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, minHeight: 14 }}
+    >
+      {status === 'saving' && savingLabel}
+      {status === 'saved' && savedLabel}
+    </div>
+  );
+}
 
 /**
  * Part D: Custom Admin Loot Table editor — the reward-wheel's weighted
@@ -29,16 +78,24 @@ const CAPTURE_SITE_LABELS: { site: CaptureSite; label: string }[] = [
  * icon via chrome.runtime.openOptionsPage().
  */
 export function Options() {
+  // No toggle control here (that lives on the Dashboard) — this just needs
+  // to apply whatever theme is currently set so the page doesn't look
+  // wrong/inconsistent when opened, and stay live if it's flipped elsewhere.
+  useTheme();
+
   const [entries, setEntries] = useState<LootTableEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [newLabel, setNewLabel] = useState('');
-  const [status, setStatus] = useState<SaveStatus>('idle');
+  const lootStatus = useFlashStatus();
   const idCounterRef = useRef(0);
-  const statusTimeoutRef = useRef<number | null>(null);
 
   const [bubbleSettings, setBubbleSettingsState] = useState<BubbleSettings | null>(null);
-  const [bubbleStatus, setBubbleStatus] = useState<SaveStatus>('idle');
-  const bubbleStatusTimeoutRef = useRef<number | null>(null);
+  const bubbleStatus = useFlashStatus();
+
+  const dataStatus = useFlashStatus();
+  const [dataStatusMessage, setDataStatusMessage] = useState('');
+  const [dataError, setDataError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     getLootTable().then((loaded) => {
@@ -47,37 +104,87 @@ export function Options() {
       setLoading(false);
     });
     getBubbleSettings().then(setBubbleSettingsState);
-    return () => {
-      if (statusTimeoutRef.current !== null) window.clearTimeout(statusTimeoutRef.current);
-      if (bubbleStatusTimeoutRef.current !== null) window.clearTimeout(bubbleStatusTimeoutRef.current);
-    };
   }, []);
 
-  function flashBubbleSaved() {
-    setBubbleStatus('saved');
-    if (bubbleStatusTimeoutRef.current !== null) window.clearTimeout(bubbleStatusTimeoutRef.current);
-    bubbleStatusTimeoutRef.current = window.setTimeout(() => setBubbleStatus('idle'), 1200);
-  }
-
   async function handleToggleGlobal(hiddenGlobally: boolean) {
-    setBubbleStatus('saving');
+    bubbleStatus.setStatus('saving');
     setBubbleSettingsState(await setBubbleSettings({ hiddenGlobally }));
-    flashBubbleSaved();
+    bubbleStatus.flash();
   }
 
   async function handleToggleSite(site: CaptureSite, hidden: boolean) {
-    setBubbleStatus('saving');
+    bubbleStatus.setStatus('saving');
     setBubbleSettingsState(await setBubbleHiddenOnDomain(site, hidden));
-    flashBubbleSaved();
+    bubbleStatus.flash();
+  }
+
+  function flashDataStatus(message: string) {
+    setDataStatusMessage(message);
+    dataStatus.flash();
+  }
+
+  async function handleExport() {
+    const [jobEntries, appEvents] = await Promise.all([getJobEntries(), getEvents()]);
+    const blob = new Blob([JSON.stringify({ jobEntries, appEvents }, null, 2)], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `sidequest-export-${todayLocalDateString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    flashDataStatus('Exported.');
+  }
+
+  function handleImportClick() {
+    setDataError(null);
+    fileInputRef.current?.click();
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setDataError(null);
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(await file.text());
+    } catch {
+      setDataError('That file is not valid JSON.');
+      return;
+    }
+
+    const result = validateExportData(parsed);
+    if ('error' in result) {
+      setDataError(result.error);
+      return;
+    }
+
+    const { jobEntries, appEvents } = result.data;
+    const currentEntries = await getJobEntries();
+    const confirmed = window.confirm(
+      `Replace all ${currentEntries.length} existing entries with ${jobEntries.length} from this file? This can't be undone.`
+    );
+    if (!confirmed) return;
+
+    dataStatus.setStatus('saving');
+    try {
+      await Promise.all([setJobEntries(jobEntries), setEvents(appEvents)]);
+      flashDataStatus('Imported.');
+    } catch {
+      dataStatus.setStatus('idle');
+      setDataError('Import failed to save — your existing data may be partially overwritten.');
+    }
   }
 
   async function persist(next: LootTableEntry[]) {
     setEntries(next);
-    setStatus('saving');
+    lootStatus.setStatus('saving');
     await setLootTable(next);
-    setStatus('saved');
-    if (statusTimeoutRef.current !== null) window.clearTimeout(statusTimeoutRef.current);
-    statusTimeoutRef.current = window.setTimeout(() => setStatus('idle'), 1200);
+    lootStatus.flash();
   }
 
   function updateField(id: string, updates: Partial<Omit<LootTableEntry, 'id'>>) {
@@ -108,7 +215,7 @@ export function Options() {
           <span className="brand-mark">
             <ShieldIcon />
           </span>
-          SideQuest Settings
+          <h1>SideQuest Settings</h1>
         </div>
         <div className="eyebrow">Reward Loot Table</div>
       </header>
@@ -204,10 +311,7 @@ export function Options() {
               </button>
             </div>
 
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, minHeight: 14 }}>
-              {status === 'saving' && 'Saving…'}
-              {status === 'saved' && 'Saved.'}
-            </div>
+            <StatusLine status={lootStatus.status} savingLabel="Saving…" savedLabel="Saved." />
           </>
         )}
       </section>
@@ -254,12 +358,54 @@ export function Options() {
               </div>
             ))}
 
-            <div style={{ fontSize: 11, color: 'var(--text-3)', marginTop: 10, minHeight: 14 }}>
-              {bubbleStatus === 'saving' && 'Saving…'}
-              {bubbleStatus === 'saved' && 'Saved.'}
-            </div>
+            <StatusLine status={bubbleStatus.status} savingLabel="Saving…" savedLabel="Saved." />
           </>
         )}
+      </section>
+
+      <section className="admin-panel">
+        <div className="admin-header">
+          <h2>Bulk Import</h2>
+        </div>
+        <p className="admin-sub">
+          Paste rows copied from a spreadsheet to backfill your history in one go.
+        </p>
+        <BulkImportPanel />
+      </section>
+
+      <section className="admin-panel">
+        <div className="admin-header">
+          <h2>Data</h2>
+        </div>
+        <p className="admin-sub">
+          Export your full job-tracker history as a JSON file, or import one to replace what's
+          here now.
+        </p>
+
+        <div className="import-actions">
+          <button className="btn" type="button" onClick={handleExport}>
+            Export data
+          </button>
+          <button className="btn btn--secondary" type="button" onClick={handleImportClick}>
+            Import data
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: 'none' }}
+            onChange={handleImportFile}
+            aria-label="Import data file"
+          />
+        </div>
+
+        {dataError && (
+          <div className="import-errors" role="alert">
+            {dataError}
+          </div>
+        )}
+
+        <StatusLine status={dataStatus.status} savingLabel="Importing…" savedLabel={dataStatusMessage} />
       </section>
     </div>
   );

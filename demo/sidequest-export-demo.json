@@ -1,0 +1,472 @@
+{
+  "jobEntries": [
+    {
+      "id": "aaacc2179cef",
+      "company": "Cinderfield Works",
+      "role": "Senior Frontend Engineer",
+      "url": "https://careers.cinderfieldworks.com/senior-frontend-engineer",
+      "status": "offer",
+      "dateAdded": "2026-06-18T10:00:00.000Z",
+      "lastUpdated": "2026-07-09T16:00:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "baa73a78d5e6",
+      "company": "Hollowell Data",
+      "role": "Frontend Engineer",
+      "url": "https://careers.hollowelldata.com/frontend-engineer",
+      "status": "rejected",
+      "dateAdded": "2026-06-19T10:00:00.000Z",
+      "lastUpdated": "2026-07-04T14:20:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "55f9b3945382",
+      "company": "Brightline Labs",
+      "role": "Frontend Engineer",
+      "url": "https://careers.brightlinelabs.com/jobs/frontend-engineer",
+      "status": "saved",
+      "dateAdded": "2026-06-20T10:00:00.000Z",
+      "lastUpdated": "2026-06-20T10:00:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "0e6547003b53",
+      "company": "Northwind Analytics",
+      "role": "Full Stack Developer",
+      "url": "https://jobs.northwindanalytics.com/postings/fs-dev",
+      "status": "saved",
+      "dateAdded": "2026-06-21T10:00:00.000Z",
+      "lastUpdated": "2026-06-21T10:00:00.000Z",
+      "source": "indeed"
+    },
+    {
+      "id": "1e4b50e33838",
+      "company": "Redshank Studios",
+      "role": "Frontend Engineer",
+      "url": "https://careers.redshankstudios.com/frontend-engineer",
+      "status": "rejected",
+      "dateAdded": "2026-06-21T10:00:00.000Z",
+      "lastUpdated": "2026-06-29T10:00:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "d18856dce0af",
+      "company": "Solace Robotics",
+      "role": "Frontend Developer",
+      "url": "https://careers.solacerobotics.com/frontend-developer",
+      "status": "applied",
+      "dateAdded": "2026-06-22T10:00:00.000Z",
+      "lastUpdated": "2026-06-22T15:30:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "d861dcd0a591",
+      "company": "Pinecrest Digital",
+      "role": "Frontend Engineer",
+      "url": "https://careers.pinecrestdigital.com/frontend-engineer",
+      "status": "interviewing",
+      "dateAdded": "2026-06-23T10:00:00.000Z",
+      "lastUpdated": "2026-07-02T13:15:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "8b60fe11d935",
+      "company": "Marrow Health",
+      "role": "Software Engineer I",
+      "url": "https://jobs.marrowhealth.com/software-engineer-i",
+      "status": "applied",
+      "dateAdded": "2026-06-24T10:00:00.000Z",
+      "lastUpdated": "2026-06-24T16:10:00.000Z",
+      "source": "indeed"
+    },
+    {
+      "id": "363715ad16db",
+      "company": "Thistledown Labs",
+      "role": "Software Engineer",
+      "url": "https://jobs.thistledownlabs.com/software-engineer",
+      "status": "interviewing",
+      "dateAdded": "2026-06-25T10:00:00.000Z",
+      "lastUpdated": "2026-07-06T15:45:00.000Z",
+      "source": "indeed"
+    },
+    {
+      "id": "e2649fbe5ebb",
+      "company": "Foxglove Systems",
+      "role": "Software Developer",
+      "url": "https://jobs.foxglovesystems.com/software-developer",
+      "status": "rejected",
+      "dateAdded": "2026-06-26T10:00:00.000Z",
+      "lastUpdated": "2026-07-03T16:40:00.000Z",
+      "source": "generic"
+    },
+    {
+      "id": "266564e4c870",
+      "company": "Fernbridge Studio",
+      "role": "Product Engineer",
+      "url": "https://fernbridgestudio.com/careers/product-engineer",
+      "status": "applied",
+      "dateAdded": "2026-06-27T10:00:00.000Z",
+      "lastUpdated": "2026-06-27T12:45:00.000Z",
+      "source": "ziprecruiter"
+    },
+    {
+      "id": "5642b9e390f0",
+      "company": "Amberglow Tech",
+      "role": "Full Stack Engineer",
+      "url": "https://careers.amberglowtech.com/full-stack-engineer",
+      "status": "interviewing",
+      "dateAdded": "2026-06-30T10:00:00.000Z",
+      "lastUpdated": "2026-07-11T17:00:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "86686062338f",
+      "company": "Alderly Systems",
+      "role": "Frontend Engineer",
+      "url": "https://careers.alderlysystems.com/frontend-engineer",
+      "status": "applied",
+      "dateAdded": "2026-07-01T10:00:00.000Z",
+      "lastUpdated": "2026-07-01T09:20:00.000Z",
+      "source": "manual"
+    },
+    {
+      "id": "a23a957ecfc8",
+      "company": "Kettlewell Co",
+      "role": "Web Developer",
+      "url": "https://kettlewellco.com/jobs/web-developer",
+      "status": "applied",
+      "dateAdded": "2026-07-05T10:00:00.000Z",
+      "lastUpdated": "2026-07-05T11:00:00.000Z",
+      "source": "import"
+    },
+    {
+      "id": "3172861621d9",
+      "company": "Verdant Software",
+      "role": "React Engineer",
+      "url": "https://careers.verdantsoftware.io/react-engineer",
+      "status": "saved",
+      "dateAdded": "2026-07-10T10:00:00.000Z",
+      "lastUpdated": "2026-07-10T10:00:00.000Z",
+      "source": "linkedin"
+    },
+    {
+      "id": "c3998d531751",
+      "company": "Cobalt Interactive",
+      "role": "UI Engineer",
+      "url": "https://cobaltinteractive.com/careers/ui-engineer",
+      "status": "saved",
+      "dateAdded": "2026-07-12T10:00:00.000Z",
+      "lastUpdated": "2026-07-12T10:00:00.000Z",
+      "source": "generic"
+    }
+  ],
+  "appEvents": [
+    {
+      "id": "9bdafc334293",
+      "type": "capture",
+      "jobEntryId": "aaacc2179cef",
+      "timestamp": "2026-06-18T10:00:00.000Z"
+    },
+    {
+      "id": "eb13a31d58b6",
+      "type": "capture",
+      "jobEntryId": "baa73a78d5e6",
+      "timestamp": "2026-06-19T10:00:00.000Z"
+    },
+    {
+      "id": "0929824b922d",
+      "type": "status_change",
+      "jobEntryId": "aaacc2179cef",
+      "timestamp": "2026-06-19T10:00:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "7d096d37f0ed",
+      "type": "capture",
+      "jobEntryId": "55f9b3945382",
+      "timestamp": "2026-06-20T10:00:00.000Z"
+    },
+    {
+      "id": "a985dfd08764",
+      "type": "status_change",
+      "jobEntryId": "baa73a78d5e6",
+      "timestamp": "2026-06-20T13:00:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "34d638c01ad1",
+      "type": "capture",
+      "jobEntryId": "0e6547003b53",
+      "timestamp": "2026-06-21T10:00:00.000Z"
+    },
+    {
+      "id": "71813a0d9a4d",
+      "type": "capture",
+      "jobEntryId": "1e4b50e33838",
+      "timestamp": "2026-06-21T10:00:00.000Z"
+    },
+    {
+      "id": "b7b227e7c60a",
+      "type": "status_change",
+      "jobEntryId": "1e4b50e33838",
+      "timestamp": "2026-06-22T09:00:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "d7538c1cacbc",
+      "type": "capture",
+      "jobEntryId": "d18856dce0af",
+      "timestamp": "2026-06-22T10:00:00.000Z"
+    },
+    {
+      "id": "2c7db2c194cb",
+      "type": "status_change",
+      "jobEntryId": "d18856dce0af",
+      "timestamp": "2026-06-22T15:30:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "c954eb3a9f58",
+      "type": "capture",
+      "jobEntryId": "d861dcd0a591",
+      "timestamp": "2026-06-23T10:00:00.000Z"
+    },
+    {
+      "id": "48a73453a9c5",
+      "type": "status_change",
+      "jobEntryId": "baa73a78d5e6",
+      "timestamp": "2026-06-24T09:45:00.000Z",
+      "metadata": {
+        "fromStatus": "applied",
+        "toStatus": "interviewing"
+      }
+    },
+    {
+      "id": "be00c84f8f74",
+      "type": "capture",
+      "jobEntryId": "8b60fe11d935",
+      "timestamp": "2026-06-24T10:00:00.000Z"
+    },
+    {
+      "id": "e48cc93c7c05",
+      "type": "status_change",
+      "jobEntryId": "8b60fe11d935",
+      "timestamp": "2026-06-24T16:10:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "eebd4a8ee37c",
+      "type": "capture",
+      "jobEntryId": "363715ad16db",
+      "timestamp": "2026-06-25T10:00:00.000Z"
+    },
+    {
+      "id": "15bcee31cd3c",
+      "type": "status_change",
+      "jobEntryId": "d861dcd0a591",
+      "timestamp": "2026-06-25T14:00:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "36f02850be6b",
+      "type": "capture",
+      "jobEntryId": "e2649fbe5ebb",
+      "timestamp": "2026-06-26T10:00:00.000Z"
+    },
+    {
+      "id": "f9a33abad009",
+      "type": "status_change",
+      "jobEntryId": "363715ad16db",
+      "timestamp": "2026-06-26T10:30:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "2d4bd70529c0",
+      "type": "capture",
+      "jobEntryId": "266564e4c870",
+      "timestamp": "2026-06-27T10:00:00.000Z"
+    },
+    {
+      "id": "3ab01f210b6f",
+      "type": "status_change",
+      "jobEntryId": "e2649fbe5ebb",
+      "timestamp": "2026-06-27T11:20:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "1a30b121457c",
+      "type": "status_change",
+      "jobEntryId": "266564e4c870",
+      "timestamp": "2026-06-27T12:45:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "7a78efeabc52",
+      "type": "status_change",
+      "jobEntryId": "aaacc2179cef",
+      "timestamp": "2026-06-28T13:30:00.000Z",
+      "metadata": {
+        "fromStatus": "applied",
+        "toStatus": "interviewing"
+      }
+    },
+    {
+      "id": "5ee53675cfd3",
+      "type": "status_change",
+      "jobEntryId": "1e4b50e33838",
+      "timestamp": "2026-06-29T10:00:00.000Z",
+      "metadata": {
+        "fromStatus": "applied",
+        "toStatus": "rejected"
+      }
+    },
+    {
+      "id": "8e7557f8e4cd",
+      "type": "capture",
+      "jobEntryId": "5642b9e390f0",
+      "timestamp": "2026-06-30T10:00:00.000Z"
+    },
+    {
+      "id": "bd222c376835",
+      "type": "status_change",
+      "jobEntryId": "86686062338f",
+      "timestamp": "2026-07-01T09:20:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "c20268046b17",
+      "type": "manual_add",
+      "jobEntryId": "86686062338f",
+      "timestamp": "2026-07-01T10:00:00.000Z"
+    },
+    {
+      "id": "b15b43778c72",
+      "type": "status_change",
+      "jobEntryId": "5642b9e390f0",
+      "timestamp": "2026-07-01T12:00:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "5db725fb6661",
+      "type": "status_change",
+      "jobEntryId": "d861dcd0a591",
+      "timestamp": "2026-07-02T13:15:00.000Z",
+      "metadata": {
+        "fromStatus": "applied",
+        "toStatus": "interviewing"
+      }
+    },
+    {
+      "id": "1236b6c614a0",
+      "type": "status_change",
+      "jobEntryId": "e2649fbe5ebb",
+      "timestamp": "2026-07-03T16:40:00.000Z",
+      "metadata": {
+        "fromStatus": "applied",
+        "toStatus": "rejected"
+      }
+    },
+    {
+      "id": "09a4041de062",
+      "type": "status_change",
+      "jobEntryId": "baa73a78d5e6",
+      "timestamp": "2026-07-04T14:20:00.000Z",
+      "metadata": {
+        "fromStatus": "interviewing",
+        "toStatus": "rejected"
+      }
+    },
+    {
+      "id": "846cb011ca86",
+      "type": "import",
+      "jobEntryId": "a23a957ecfc8",
+      "timestamp": "2026-07-05T10:00:00.000Z"
+    },
+    {
+      "id": "c5c72e6dd1e9",
+      "type": "status_change",
+      "jobEntryId": "a23a957ecfc8",
+      "timestamp": "2026-07-05T11:00:00.000Z",
+      "metadata": {
+        "fromStatus": "saved",
+        "toStatus": "applied"
+      }
+    },
+    {
+      "id": "59c26c5bc6a3",
+      "type": "status_change",
+      "jobEntryId": "363715ad16db",
+      "timestamp": "2026-07-06T15:45:00.000Z",
+      "metadata": {
+        "fromStatus": "applied",
+        "toStatus": "interviewing"
+      }
+    },
+    {
+      "id": "c88c90eefbc3",
+      "type": "status_change",
+      "jobEntryId": "aaacc2179cef",
+      "timestamp": "2026-07-09T16:00:00.000Z",
+      "metadata": {
+        "fromStatus": "interviewing",
+        "toStatus": "offer"
+      }
+    },
+    {
+      "id": "ff63193996ce",
+      "type": "capture",
+      "jobEntryId": "3172861621d9",
+      "timestamp": "2026-07-10T10:00:00.000Z"
+    },
+    {
+      "id": "0c0c29f8b6a4",
+      "type": "status_change",
+      "jobEntryId": "5642b9e390f0",
+      "timestamp": "2026-07-11T17:00:00.000Z",
+      "metadata": {
+        "fromStatus": "applied",
+        "toStatus": "interviewing"
+      }
+    },
+    {
+      "id": "62686bcea2d5",
+      "type": "capture",
+      "jobEntryId": "c3998d531751",
+      "timestamp": "2026-07-12T10:00:00.000Z"
+    }
+  ]
+}

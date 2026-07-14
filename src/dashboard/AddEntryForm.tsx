@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { ApplicationStatus } from '../lib/types';
-import { createJobEntry } from './createEntry';
-import { todayLocalDateString, localDateOnlyToIso } from './dateUtils';
-import { validateJobUrl } from './urlValidation';
+import { createJobEntry } from '../lib/createEntry';
+import { todayLocalDateString, localDateOnlyToIso } from '../lib/dateUtils';
+import { validateJobUrl } from '../lib/urlValidation';
 
 const STATUS_OPTIONS: ApplicationStatus[] = [
   'saved',
@@ -122,7 +122,7 @@ export function AddEntryForm({ onAdded }: AddEntryFormProps) {
         </button>
       </div>
       {error && (
-        <div className="form-error" style={{ gridColumn: '1 / -1' }}>
+        <div className="form-error" role="alert" style={{ gridColumn: '1 / -1' }}>
           {error}
         </div>
       )}

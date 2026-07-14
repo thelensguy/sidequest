@@ -28,3 +28,7 @@ yarn-error.log*
 
 # Chrome extension packaging output
 *.zip
+
+# Session continuity notes for Claude Code — internal working doc, not a
+# project artifact; stays local rather than shipping in the public repo.
+HANDOFF.html

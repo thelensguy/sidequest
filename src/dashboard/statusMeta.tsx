@@ -52,11 +52,3 @@ export const STATUS_STAT_LABEL: Record<ApplicationStatus, string> = {
   rejected: 'Failed',
   offer: 'Victory',
 };
-
-export const STATUS_ORDER: ApplicationStatus[] = [
-  'saved',
-  'applied',
-  'interviewing',
-  'rejected',
-  'offer',
-];

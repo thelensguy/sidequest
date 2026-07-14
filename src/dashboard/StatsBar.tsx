@@ -1,6 +1,6 @@
-import type { ApplicationStatus, JobEntry } from '../lib/types';
+import { STATUS_ORDER, type ApplicationStatus, type JobEntry } from '../lib/types';
 import { LayersIcon } from '../components/icons';
-import { STATUS_ICON, STATUS_ORDER, STATUS_STAT_LABEL } from './statusMeta';
+import { STATUS_ICON, STATUS_STAT_LABEL } from './statusMeta';
 
 interface StatsBarProps {
   entries: JobEntry[];

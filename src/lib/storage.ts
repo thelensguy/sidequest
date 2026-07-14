@@ -1,10 +1,18 @@
-import type { AppEvent, BubbleSettings, CaptureSite, JobEntry, LootTableEntry } from './types';
+import type {
+  AppEvent,
+  BubbleSettings,
+  CaptureSite,
+  JobEntry,
+  LootTableEntry,
+  ThemePreference,
+} from './types';
 
 const KEYS = {
   jobEntries: 'jobEntries',
   appEvents: 'appEvents',
   lootTable: 'lootTable',
   bubbleSettings: 'bubbleSettings',
+  themePreference: 'themePreference',
 } as const;
 
 const SESSION_KEYS = {
@@ -16,6 +24,8 @@ const DEFAULT_BUBBLE_SETTINGS: BubbleSettings = {
   hiddenDomains: [],
   hiddenGlobally: false,
 };
+
+const DEFAULT_THEME_PREFERENCE: ThemePreference = 'dark';
 
 /**
  * Default weighted loot table, seeded the first time a user opens Options
@@ -71,6 +81,10 @@ export function getJobEntries(): Promise<JobEntry[]> {
   return getLocal<JobEntry[]>(KEYS.jobEntries, []);
 }
 
+export function setJobEntries(entries: JobEntry[]): Promise<void> {
+  return setLocal(KEYS.jobEntries, entries);
+}
+
 /** Generates an id automatically if the caller doesn't supply one. */
 export async function addJobEntry(
   entry: Omit<JobEntry, 'id'> & { id?: string }
@@ -117,6 +131,10 @@ export async function deleteJobEntry(id: string): Promise<void> {
 
 export function getEvents(): Promise<AppEvent[]> {
   return getLocal<AppEvent[]>(KEYS.appEvents, []);
+}
+
+export function setEvents(events: AppEvent[]): Promise<void> {
+  return setLocal(KEYS.appEvents, events);
 }
 
 /** Generates an id automatically if the caller doesn't supply one. */
@@ -181,4 +199,14 @@ export function isBubbleHiddenUntilRestart(): Promise<boolean> {
 
 export function hideBubbleUntilRestart(): Promise<void> {
   return setSession(SESSION_KEYS.bubbleHiddenUntilRestart, true);
+}
+
+// Dashboard/Options theme
+
+export function getThemePreference(): Promise<ThemePreference> {
+  return getLocal<ThemePreference>(KEYS.themePreference, DEFAULT_THEME_PREFERENCE);
+}
+
+export function setThemePreference(theme: ThemePreference): Promise<void> {
+  return setLocal(KEYS.themePreference, theme);
 }

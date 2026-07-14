@@ -1,11 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   getBubbleSettings,
+  getEvents,
+  getJobEntries,
   hideBubbleUntilRestart,
   isBubbleHiddenUntilRestart,
   setBubbleHiddenOnDomain,
   setBubbleSettings,
+  setEvents,
+  setJobEntries,
 } from './storage';
+import type { AppEvent, JobEntry } from './types';
 
 /**
  * Minimal in-memory fake for chrome.storage.local/session — just enough
@@ -59,6 +64,42 @@ describe('bubble settings (chrome.storage.local)', () => {
     await setBubbleHiddenOnDomain('indeed', true);
     const next = await setBubbleHiddenOnDomain('linkedin', false);
     expect(next.hiddenDomains).toEqual(['indeed']);
+  });
+});
+
+describe('setJobEntries / setEvents (chrome.storage.local)', () => {
+  it('replaces the full job entries list rather than merging', async () => {
+    const first: JobEntry = {
+      id: 'a',
+      company: 'Acme',
+      role: 'Engineer',
+      url: '',
+      status: 'saved',
+      dateAdded: '2026-01-01T00:00:00.000Z',
+      lastUpdated: '2026-01-01T00:00:00.000Z',
+      source: 'manual',
+    };
+    await setJobEntries([first]);
+
+    const second: JobEntry = { ...first, id: 'b', company: 'Globex' };
+    await setJobEntries([second]);
+
+    expect(await getJobEntries()).toEqual([second]);
+  });
+
+  it('replaces the full event log rather than merging', async () => {
+    const first: AppEvent = {
+      id: 'e1',
+      type: 'manual_add',
+      jobEntryId: 'a',
+      timestamp: '2026-01-01T00:00:00.000Z',
+    };
+    await setEvents([first]);
+
+    const second: AppEvent = { ...first, id: 'e2', jobEntryId: 'b' };
+    await setEvents([second]);
+
+    expect(await getEvents()).toEqual([second]);
   });
 });
 

@@ -1,9 +1,13 @@
 import { useState } from 'react';
-import { createJobEntry } from './createEntry';
-import { parseBulkImport, type ParseRowError } from './parseImport';
+import { createJobEntry } from '../lib/createEntry';
+import { parseBulkImport, type ParseRowError } from '../lib/parseImport';
 
 interface BulkImportPanelProps {
-  onImported: () => void;
+  /** Optional — a Dashboard tab already open elsewhere picks up the new
+   *  entries on its own via storage.onChanged, so this is only for a
+   *  caller that renders its own list (e.g. the dashboard, if it ever
+   *  hosts this panel again) and wants an immediate in-tab refresh. */
+  onImported?: () => void;
 }
 
 export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
@@ -32,7 +36,7 @@ export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
       }
       setLastImportedCount(succeeded);
       setText('');
-      onImported();
+      onImported?.();
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       setImportFailure(
@@ -40,7 +44,7 @@ export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
       );
       if (succeeded > 0) {
         setLastImportedCount(succeeded);
-        onImported();
+        onImported?.();
       }
     } finally {
       setImporting(false);
@@ -70,11 +74,13 @@ export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
           {importing ? 'Importing…' : 'Import rows'}
         </button>
         {lastImportedCount !== null && (
-          <span className="import-summary">Imported {lastImportedCount} row(s).</span>
+          <span className="import-summary" role="status">
+            Imported {lastImportedCount} row(s).
+          </span>
         )}
       </div>
       {errors.length > 0 && (
-        <div className="import-errors">
+        <div className="import-errors" role="alert">
           {errors.length} row(s) skipped:
           <ul>
             {errors.map((err) => (
@@ -85,7 +91,11 @@ export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
           </ul>
         </div>
       )}
-      {importFailure && <div className="import-errors">{importFailure}</div>}
+      {importFailure && (
+        <div className="import-errors" role="alert">
+          {importFailure}
+        </div>
+      )}
     </div>
   );
 }

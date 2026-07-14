@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import type { ApplicationStatus, JobEntry } from '../lib/types';
+import { STATUS_ORDER, type ApplicationStatus, type JobEntry } from '../lib/types';
 import { JobRow } from './JobRow';
 import { SearchIcon, SwordIcon } from '../components/icons';
-import { STATUS_ORDER, STATUS_QUEST_LABEL } from './statusMeta';
+import { StatusFilterDropdown } from './StatusFilterDropdown';
 
 interface JobTableProps {
   entries: JobEntry[];
@@ -18,7 +18,9 @@ function focusAddEntryForm() {
 
 export function JobTable({ entries, onChanged }: JobTableProps) {
   const [query, setQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<Set<ApplicationStatus>>(
+    () => new Set(STATUS_ORDER)
+  );
 
   // Most recently added first.
   const sorted = useMemo(
@@ -34,7 +36,7 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
         !normalizedQuery ||
         entry.company.toLowerCase().includes(normalizedQuery) ||
         entry.role.toLowerCase().includes(normalizedQuery);
-      const matchesStatus = statusFilter === 'all' || entry.status === statusFilter;
+      const matchesStatus = statusFilter.has(entry.status);
       return matchesQuery && matchesStatus;
     });
   }, [sorted, query, statusFilter]);
@@ -59,19 +61,7 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
               aria-label="Search company or role"
             />
           </div>
-          <select
-            className="status-filter"
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as ApplicationStatus | 'all')}
-            aria-label="Filter by status"
-          >
-            <option value="all">All statuses</option>
-            {STATUS_ORDER.map((status) => (
-              <option key={status} value={status}>
-                {STATUS_QUEST_LABEL[status]}
-              </option>
-            ))}
-          </select>
+          <StatusFilterDropdown selected={statusFilter} onChange={setStatusFilter} />
           <button className="btn-primary" type="button" onClick={focusAddEntryForm}>
             <SwordIcon />
             Log a Quest
@@ -92,7 +82,9 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
           </div>
           {visible.length === 0 && (
             <div className="empty-state" style={{ display: 'block' }}>
-              No quests match your search.
+              {statusFilter.size === 0
+                ? 'No statuses selected — check a status to see quests.'
+                : 'No quests match your search.'}
             </div>
           )}
         </>
