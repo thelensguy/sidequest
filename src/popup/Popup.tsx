@@ -108,10 +108,14 @@ export function Popup() {
       setState({ phase: 'manual', tab });
       isSavingRef.current = false;
     } catch (err) {
-      setState({
-        phase: 'error',
-        message: err instanceof Error ? err.message : 'Something went wrong capturing this page.',
-      });
+      const raw = err instanceof Error ? err.message : '';
+      // chrome.scripting can't run on browser-internal pages (chrome://,
+      // the Web Store, PDFs) and throws messages like "Cannot access a
+      // chrome:// URL" — surface something a user can act on instead.
+      const message = /cannot access|cannot be scripted|chrome:\/\/|extensions gallery/i.test(raw)
+        ? "Chrome doesn't let extensions read this page. Open a job posting in a normal tab, or add the entry from the dashboard."
+        : raw || 'Something went wrong capturing this page.';
+      setState({ phase: 'error', message });
       isSavingRef.current = false;
     }
   }

@@ -5,9 +5,15 @@ import { countDistinctEntriesWithStatus, reachedStatusKeys } from './statusMiles
  * XP point values.
  *
  * Design choices (tuned, not derived from any spec):
- * - capture / manual_add / import: +5 XP each. These are "logging" actions —
+ * - capture / manual_add: +5 XP each. These are "logging" actions —
  *   low effort, so low reward, but still worth something since a tracked
  *   application beats an untracked one.
+ * - import: +0. Bulk-importing a backfill spreadsheet isn't new effort —
+ *   at +5 each, pasting 100 historical rows instantly granted +500 XP,
+ *   ~5 level-ups, and a wheel spin per level-up. History should carry
+ *   over without feeling like a jackpot.
+ * - wheel_spin: +0 (no case below — it's reward-dial bookkeeping, not a
+ *   progress action).
  * - status_change -> 'applied': +10. Actually applying is the first real
  *   piece of follow-through after a capture.
  * - status_change -> 'interviewing': +20. A meaningfully bigger deal than
@@ -33,7 +39,7 @@ import { countDistinctEntriesWithStatus, reachedStatusKeys } from './statusMiles
 export const XP_VALUES = {
   capture: 5,
   manual_add: 5,
-  import: 5,
+  import: 0,
   status_change_applied: 10,
   status_change_interviewing: 20,
   status_change_rejected: 15,

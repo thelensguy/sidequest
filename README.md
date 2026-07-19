@@ -2,6 +2,8 @@
 
 A Chrome extension that turns job-search tracking into a game, so the grind of applying feels like progress instead of a black hole.
 
+**[Install SideQuest from the Chrome Web Store](https://chromewebstore.google.com/detail/sidequest/kichojelgbbiimdocjngfcgpnofpcdcd)**
+
 ![SideQuest dashboard, dark theme](docs/screenshots/dashboard-dark.png)
 
 ## What it does
@@ -19,6 +21,12 @@ Job seekers who are tired of tracking applications in a spreadsheet and want som
 
 ## How to run it
 
+### From the Chrome Web Store (easiest)
+
+[Install SideQuest](https://chromewebstore.google.com/detail/sidequest/kichojelgbbiimdocjngfcgpnofpcdcd) and you're done — you'll see the SideQuest icon in your toolbar. Click it on any job posting to try capturing one, or open the dashboard from there to see the full tracker.
+
+### From source
+
 You'll need [Node.js](https://nodejs.org/) installed.
 
 ```bash
@@ -34,8 +42,6 @@ Then load it into Chrome:
 2. Turn on **Developer mode** (top-right toggle).
 3. Click **Load unpacked**.
 4. Select the `dist` folder this project just built.
-
-That's it — you'll see the SideQuest icon in your toolbar. Click it on any job posting to try capturing one, or open the dashboard from there to see the full tracker.
 
 ### While developing
 

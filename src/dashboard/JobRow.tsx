@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { STATUS_ORDER, type ApplicationStatus, type JobEntry } from '../lib/types';
 import { appendEvent, deleteJobEntry, getEvents, updateJobEntry } from '../lib/storage';
 import { computeXp } from '../gamification/xp';
-import { isStale, daysSince } from './staleness';
+import { isStaleEntry, daysSince } from './staleness';
 import { EditableField } from './EditableField';
 import { validateJobUrl } from '../lib/urlValidation';
 import { formatMetaDateRange } from '../lib/dateUtils';
@@ -23,7 +23,7 @@ interface JobRowProps {
 }
 
 export function JobRow({ entry, onChanged }: JobRowProps) {
-  const stale = isStale(entry.lastUpdated);
+  const stale = isStaleEntry(entry);
   const StatusIcon = STATUS_ICON[entry.status];
 
   // Part 1 (Juice): floating "+N XP" ticker. `tickerKey` forces a fresh
@@ -31,6 +31,22 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
   // ticker fires, since firing the same status twice in a row wouldn't
   // otherwise remount the element.
   const [ticker, setTicker] = useState<{ key: number; amount: number } | null>(null);
+
+  // Inline replacements for window.confirm/alert — native dialogs get
+  // silently suppressed by Chrome when the page isn't the active tab
+  // (observed in this extension's own error log), which would make delete
+  // and URL-validation feedback vanish without a trace.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [urlError, setUrlError] = useState<string | null>(null);
+  const confirmTimeoutRef = useRef<number | null>(null);
+  const urlErrorTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (confirmTimeoutRef.current !== null) window.clearTimeout(confirmTimeoutRef.current);
+      if (urlErrorTimeoutRef.current !== null) window.clearTimeout(urlErrorTimeoutRef.current);
+    };
+  }, []);
 
   async function handleStatusChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const toStatus = e.target.value as ApplicationStatus;
@@ -48,15 +64,16 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
 
     const now = new Date().toISOString();
     await updateJobEntry(entry.id, { status: toStatus, lastUpdated: now });
-    await appendEvent({
+    const appended = await appendEvent({
       type: 'status_change',
       jobEntryId: entry.id,
       timestamp: now,
       metadata: { fromStatus, toStatus },
     });
 
-    const eventsAfter = await getEvents();
-    const xpAfter = computeXp(eventsAfter);
+    // The post-write log is exactly the pre-write log plus the event just
+    // appended — no need for a second full storage read.
+    const xpAfter = computeXp([...eventsBefore, appended]);
     const delta = xpAfter - xpBefore;
     if (delta > 0) {
       setTicker({ key: Date.now(), amount: delta });
@@ -72,7 +89,9 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
       if (safeUrl === null) {
         // Same http(s)-only rule as the add/import paths — refuse to store
         // (and later render as a clickable href) anything else.
-        window.alert('Link must be a valid http(s) URL, or left blank.');
+        setUrlError('Link must be a valid http(s) URL, or left blank.');
+        if (urlErrorTimeoutRef.current !== null) window.clearTimeout(urlErrorTimeoutRef.current);
+        urlErrorTimeoutRef.current = window.setTimeout(() => setUrlError(null), 4000);
         return;
       }
       value = safeUrl;
@@ -86,8 +105,16 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
   }
 
   async function handleDelete() {
-    const label = [entry.role, entry.company].filter(Boolean).join(' at ') || 'this entry';
-    if (!window.confirm(`Delete ${label}? This can't be undone.`)) return;
+    // Two-stage inline confirm: first click arms, second click (within 3s)
+    // deletes. The armed state auto-resets so a stray click can't leave a
+    // live delete button waiting indefinitely.
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      if (confirmTimeoutRef.current !== null) window.clearTimeout(confirmTimeoutRef.current);
+      confirmTimeoutRef.current = window.setTimeout(() => setConfirmingDelete(false), 3000);
+      return;
+    }
+    if (confirmTimeoutRef.current !== null) window.clearTimeout(confirmTimeoutRef.current);
     await deleteJobEntry(entry.id);
     onChanged();
   }
@@ -121,6 +148,11 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
         {stale && (
           <span className="stale-badge" title={`No update in ${daysSince(entry.lastUpdated)} days`}>
             Stale · {daysSince(entry.lastUpdated)}d
+          </span>
+        )}
+        {urlError && (
+          <span className="form-error" role="alert">
+            {urlError}
           </span>
         )}
       </div>
@@ -176,10 +208,14 @@ export function JobRow({ entry, onChanged }: JobRowProps) {
 
         <button
           type="button"
-          className="quest-delete"
+          className={`quest-delete${confirmingDelete ? ' confirming' : ''}`}
           onClick={handleDelete}
-          aria-label={`Delete ${entry.role || 'entry'} at ${entry.company || 'unknown company'}`}
-          title="Delete"
+          aria-label={
+            confirmingDelete
+              ? `Click again to permanently delete ${entry.role || 'entry'} at ${entry.company || 'unknown company'}`
+              : `Delete ${entry.role || 'entry'} at ${entry.company || 'unknown company'}`
+          }
+          title={confirmingDelete ? 'Click again to confirm delete' : 'Delete'}
         >
           <XIcon />
         </button>

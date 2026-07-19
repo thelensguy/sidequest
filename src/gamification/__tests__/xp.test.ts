@@ -15,8 +15,12 @@ describe('computeXp', () => {
     expect(computeXp([makeEvent('manual_add')])).toBe(5);
   });
 
-  it('awards +5 for import events', () => {
-    expect(computeXp([makeEvent('import')])).toBe(5);
+  it('awards 0 for import events (backfill should not inflate XP)', () => {
+    expect(computeXp([makeEvent('import')])).toBe(0);
+  });
+
+  it('awards 0 for wheel_spin events (bookkeeping, not progress)', () => {
+    expect(computeXp([makeEvent('wheel_spin')])).toBe(0);
   });
 
   it('awards +10 for status_change to applied', () => {

@@ -1,4 +1,5 @@
 import type { AppEvent, ApplicationStatus } from '../lib/types';
+import { toLocalDateString } from '../lib/dateUtils';
 
 export interface Badge {
   /** Stable identifier, used as a React key and for lookups. */
@@ -55,9 +56,11 @@ function findFirstStatusChange(
  * day streak felt too easy to break (and punish) in a low-frequency activity
  * like job hunting — someone applying steadily every few days over a few
  * weeks is showing exactly the persistence this badge should reward, even
- * with gaps (weekends, holidays, etc). Calendar day is derived from the
- * event's ISO timestamp date portion (UTC, since that's what Date/ISO
- * strings give us without introducing timezone lookups).
+ * with gaps (weekends, holidays, etc). Calendar day is the user's LOCAL
+ * day (via toLocalDateString), not the UTC date slice — an evening
+ * session in a US timezone lands after UTC midnight, and bucketing by
+ * UTC would silently credit it to "tomorrow" while every date the
+ * dashboard displays uses local time.
  */
 function computeSevenDayStreakBadge(events: AppEvent[]): Badge {
   const meta = BADGE_META['seven-day-streak'];
@@ -67,7 +70,7 @@ function computeSevenDayStreakBadge(events: AppEvent[]): Badge {
 
   const seenDays = new Set<string>();
   for (const event of relevant) {
-    const day = event.timestamp.slice(0, 10); // YYYY-MM-DD
+    const day = toLocalDateString(new Date(event.timestamp));
     seenDays.add(day);
     if (seenDays.size >= 7) {
       return {

@@ -1,37 +1,24 @@
 /**
- * Tracks the event-count "checkpoint" the reward wheel was last spun at, so
- * shouldUnlockWheel() (in wheel.ts) can tell what's happened *since* the
- * last spin.
+ * LEGACY read-only shim. Spins used to persist a "last spun at event count"
+ * checkpoint under this chrome.storage.local key; spins are now recorded as
+ * 'wheel_spin' events in the log itself and the checkpoint is derived from
+ * there (deriveLastSpunCheckpoint in wheel.ts) — which also removed the
+ * read-then-write race the old scheme documented, and made the checkpoint
+ * survive export/import round-trips.
  *
- * This is the one file in src/gamification/ that touches chrome.* — every
- * other file here (xp.ts, levels.ts, badges.ts, wheel.ts) is a pure
- * function of AppEvent[], per CLAUDE.md's "pure functions only" rule for
- * this folder. This piece of state doesn't fit that mold: it's UI
- * bookkeeping ("did the user already claim this milestone's spin?"), not
- * derived game data, so it can't be recomputed from the event log the way
- * XP/levels/badges can.
+ * This read exists only so an install that spun under the old scheme
+ * doesn't see its wheel spuriously re-unlock after updating: until the
+ * first new-style spin appends a wheel_spin event, the derived checkpoint
+ * is 0 and callers fall back to this stored value. Once a wheel_spin event
+ * exists, this is never consulted again.
  *
- * It intentionally does NOT live in src/lib/storage.ts. That file is owned
- * by another part of the app and its instructions are to only ever read
- * from it, not extend it with new keys/functions. So this uses
- * chrome.storage.local directly, under its own namespaced key, scoped
- * entirely to gamification concerns.
+ * Still uses chrome.storage.local directly rather than src/lib/storage.ts,
+ * for the same reason the old implementation did: that file is the shared
+ * data contract, and this is gamification-scoped bookkeeping.
  */
 const LAST_SPUN_KEY = 'gamification.lastSpunAtEventCount';
 
-export async function getLastSpunAtEventCount(): Promise<number> {
+export async function getLegacyLastSpunAtEventCount(): Promise<number> {
   const result = await chrome.storage.local.get(LAST_SPUN_KEY);
   return (result[LAST_SPUN_KEY] as number) ?? 0;
 }
-
-export async function setLastSpunAtEventCount(count: number): Promise<void> {
-  await chrome.storage.local.set({ [LAST_SPUN_KEY]: count });
-}
-
-// Known, accepted gap: this read-then-write has no compare-and-swap. If two
-// extension pages are open at once (e.g. Options and the dashboard) and both
-// read the same stale checkpoint before either writes, both could let the
-// user spin for what's really one milestone. Given this is a single-user,
-// local-only extension (per PRD.md), that's judged an acceptable tradeoff
-// rather than something worth adding real synchronization for — flagged
-// here so it stays a conscious call, not a silent one.

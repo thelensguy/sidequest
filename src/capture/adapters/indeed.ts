@@ -16,8 +16,22 @@ export function matches(url: string): boolean {
  * See the longer explanation in linkedin.ts's extract().
  */
 export function extract(doc: Document = document): ExtractedJob | null {
-  const url = doc.location.href;
-  if (!url) return null;
+  const currentUrl = doc.location.href;
+  if (!currentUrl) return null;
+
+  // Prefer a clean canonical permalink over the raw current URL — same
+  // reasoning as linkedin.ts. On Indeed's search-results pages the posting
+  // being viewed is identified by the `vjk` query param (`jk` on /viewjob
+  // pages); the rest is a long tracking-laden search query that may not
+  // even reopen the same posting later.
+  let url = currentUrl;
+  try {
+    const parsed = new URL(currentUrl);
+    const jobKey = parsed.searchParams.get('jk') ?? parsed.searchParams.get('vjk');
+    if (jobKey) url = `https://www.indeed.com/viewjob?jk=${jobKey}`;
+  } catch {
+    // Unparseable URL — keep the raw one rather than dropping the capture.
+  }
 
   function firstText(selectors: string[]): string {
     for (const selector of selectors) {

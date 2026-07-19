@@ -11,7 +11,7 @@ import {
   setLootTable,
 } from '../lib/storage';
 import { validateExportData } from '../lib/importExport';
-import type { BubbleSettings, CaptureSite, LootTableEntry } from '../lib/types';
+import type { AppEvent, BubbleSettings, CaptureSite, JobEntry, LootTableEntry } from '../lib/types';
 import { todayLocalDateString } from '../lib/dateUtils';
 import { useTheme } from '../lib/useTheme';
 import { PlusIcon, ShieldIcon, XIcon } from '../components/icons';
@@ -95,6 +95,15 @@ export function Options() {
   const dataStatus = useFlashStatus();
   const [dataStatusMessage, setDataStatusMessage] = useState('');
   const [dataError, setDataError] = useState<string | null>(null);
+  // Validated file waiting on the user's explicit go-ahead. An inline
+  // confirm (not window.confirm) because Chrome suppresses native dialogs
+  // when the page isn't the active tab — a suppressed confirm here would
+  // silently cancel the import with no feedback.
+  const [pendingImport, setPendingImport] = useState<{
+    jobEntries: JobEntry[];
+    appEvents: AppEvent[];
+    currentCount: number;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -139,6 +148,7 @@ export function Options() {
 
   function handleImportClick() {
     setDataError(null);
+    setPendingImport(null);
     fileInputRef.current?.click();
   }
 
@@ -165,11 +175,13 @@ export function Options() {
 
     const { jobEntries, appEvents } = result.data;
     const currentEntries = await getJobEntries();
-    const confirmed = window.confirm(
-      `Replace all ${currentEntries.length} existing entries with ${jobEntries.length} from this file? This can't be undone.`
-    );
-    if (!confirmed) return;
+    setPendingImport({ jobEntries, appEvents, currentCount: currentEntries.length });
+  }
 
+  async function confirmImport() {
+    if (!pendingImport) return;
+    const { jobEntries, appEvents } = pendingImport;
+    setPendingImport(null);
     dataStatus.setStatus('saving');
     try {
       await Promise.all([setJobEntries(jobEntries), setEvents(appEvents)]);
@@ -402,6 +414,26 @@ export function Options() {
         {dataError && (
           <div className="import-errors" role="alert">
             {dataError}
+          </div>
+        )}
+
+        {pendingImport && (
+          <div className="confirm-box" role="alert">
+            Replace all {pendingImport.currentCount} existing{' '}
+            {pendingImport.currentCount === 1 ? 'entry' : 'entries'} with{' '}
+            {pendingImport.jobEntries.length} from this file? This can't be undone.
+            <div className="import-actions">
+              <button className="btn" type="button" onClick={confirmImport}>
+                Replace everything
+              </button>
+              <button
+                className="btn btn--secondary"
+                type="button"
+                onClick={() => setPendingImport(null)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 

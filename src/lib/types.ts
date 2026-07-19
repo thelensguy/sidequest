@@ -39,20 +39,29 @@ export interface JobEntry {
   source: JobEntrySource;
 }
 
-export type AppEventType = 'capture' | 'status_change' | 'manual_add' | 'import';
+export type AppEventType = 'capture' | 'status_change' | 'manual_add' | 'import' | 'wheel_spin';
 
 /** Every valid AppEventType — the runtime counterpart to the type above, for validating untrusted data (e.g. an imported file). */
-export const APP_EVENT_TYPES: AppEventType[] = ['capture', 'status_change', 'manual_add', 'import'];
+export const APP_EVENT_TYPES: AppEventType[] = [
+  'capture',
+  'status_change',
+  'manual_add',
+  'import',
+  'wheel_spin',
+];
 
 export interface AppEvent {
   id: string;
   type: AppEventType;
+  /** Empty string for events not tied to a specific entry (wheel_spin). */
   jobEntryId: string;
   /** ISO 8601 timestamp */
   timestamp: string;
   metadata?: {
     fromStatus?: ApplicationStatus;
     toStatus?: ApplicationStatus;
+    /** wheel_spin only: the treat the dial landed on. */
+    treatLabel?: string;
   };
 }
 

@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
-import { getEvents, getLootTable } from '../lib/storage';
+import { appendEvent, getEvents, getLootTable } from '../lib/storage';
 import { computeXp } from './xp';
 import { levelForXp } from './levels';
 import { computeBadges, type Badge } from './badges';
-import { applicationsUntilNextMilestone, shouldUnlockWheel } from './wheel';
-import { getLastSpunAtEventCount, setLastSpunAtEventCount } from './wheelState';
+import {
+  applicationsUntilNextMilestone,
+  deriveLastSpunCheckpoint,
+  lastWonTreatLabel,
+  shouldUnlockWheel,
+} from './wheel';
+import { getLegacyLastSpunAtEventCount } from './wheelState';
 import { RewardDial } from './RewardDial';
 import { ShieldIcon, FileCheckIcon, TargetIcon, ShieldCheckIcon, TrophyIcon, FlameIcon } from '../components/icons';
 import type { AppEvent, LootTableEntry } from '../lib/types';
@@ -29,6 +34,7 @@ interface GamificationState {
   badges: Badge[];
   wheelUnlocked: boolean;
   applicationsUntilNext: number;
+  persistedTreatLabel: string | null;
 }
 
 const INITIAL_STATE: GamificationState = {
@@ -41,6 +47,7 @@ const INITIAL_STATE: GamificationState = {
   badges: [],
   wheelUnlocked: false,
   applicationsUntilNext: 5,
+  persistedTreatLabel: null,
 };
 
 function levelInto(xp: number) {
@@ -93,11 +100,15 @@ export function GamificationPanel() {
   const timeoutsRef = useRef<number[]>([]);
 
   async function refresh() {
-    const [events, lootTable, lastSpunAtEventCount] = await Promise.all([
+    const [events, lootTable, legacyCheckpoint] = await Promise.all([
       getEvents(),
       getLootTable(),
-      getLastSpunAtEventCount(),
+      getLegacyLastSpunAtEventCount(),
     ]);
+    // Spins are recorded in the event log itself; the legacy stored counter
+    // only matters for installs that last spun before that migration.
+    const derived = deriveLastSpunCheckpoint(events);
+    const lastSpunAtEventCount = derived > 0 ? derived : legacyCheckpoint;
     const xp = computeXp(events);
     const { level, label } = levelForXp(xp);
     setState({
@@ -108,8 +119,10 @@ export function GamificationPanel() {
       level,
       levelLabel: label,
       badges: computeBadges(events),
-      wheelUnlocked: shouldUnlockWheel(events, lastSpunAtEventCount),
+      // A milestone can't unlock a spin the dial has nothing to land on.
+      wheelUnlocked: shouldUnlockWheel(events, lastSpunAtEventCount) && lootTable.length > 0,
       applicationsUntilNext: applicationsUntilNextMilestone(events, lastSpunAtEventCount),
+      persistedTreatLabel: lastWonTreatLabel(events),
     });
   }
 
@@ -118,14 +131,21 @@ export function GamificationPanel() {
 
     // Keep the panel live if events/loot table change elsewhere (e.g. a
     // capture or status update happens in another extension page while
-    // this one is open).
+    // this one is open). Debounced for the same reason Dashboard.tsx's
+    // listener is: chrome.storage fires onChanged for same-page writes
+    // too, and a bulk import writes appEvents once per row — without the
+    // debounce that's a full recompute per imported row.
+    let debounceId: number | null = null;
     function onStorageChanged(changes: { [key: string]: chrome.storage.StorageChange }) {
-      if (changes.appEvents || changes.lootTable) {
-        refresh();
-      }
+      if (!changes.appEvents && !changes.lootTable) return;
+      if (debounceId !== null) window.clearTimeout(debounceId);
+      debounceId = window.setTimeout(refresh, 300);
     }
     chrome.storage.local.onChanged?.addListener(onStorageChanged);
-    return () => chrome.storage.local.onChanged?.removeListener(onStorageChanged);
+    return () => {
+      chrome.storage.local.onChanged?.removeListener(onStorageChanged);
+      if (debounceId !== null) window.clearTimeout(debounceId);
+    };
   }, []);
 
   useEffect(() => {
@@ -201,15 +221,18 @@ export function GamificationPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.xp, state.loading]);
 
-  async function handleSpun() {
-    // Re-read the event count right before persisting rather than using the
-    // render-time `state.events.length` closed over when the spin started —
-    // if a new event landed elsewhere while the dial was spinning,
-    // persisting the stale (smaller) count would make the wheel look
-    // unlocked again immediately, even though nothing happened since the
-    // real checkpoint.
-    const currentEvents = await getEvents();
-    await setLastSpunAtEventCount(currentEvents.length);
+  async function handleSpun(treat: LootTableEntry | null) {
+    // Recording the spin as an event (rather than persisting an event
+    // count) makes the checkpoint self-consistent by construction: the
+    // append lands at the end of the log, so everything before it —
+    // including anything that happened while the dial was spinning — is
+    // inside the new checkpoint automatically.
+    await appendEvent({
+      type: 'wheel_spin',
+      jobEntryId: '',
+      timestamp: new Date().toISOString(),
+      metadata: treat ? { treatLabel: treat.label } : undefined,
+    });
     refresh();
   }
 
@@ -267,6 +290,7 @@ export function GamificationPanel() {
         unlocked={state.wheelUnlocked}
         applicationsUntilNext={state.applicationsUntilNext}
         lootTable={state.lootTable}
+        persistedTreatLabel={state.persistedTreatLabel}
         onSpun={handleSpun}
       />
     </section>

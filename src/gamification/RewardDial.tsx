@@ -11,8 +11,10 @@ interface RewardDialProps {
   /** Countdown to the next every-5-applications milestone (1-5), from wheel.ts's applicationsUntilNextMilestone(). */
   applicationsUntilNext: number;
   lootTable: LootTableEntry[];
-  /** Called once a spin finishes revealing its result — the parent persists the new spin checkpoint. */
-  onSpun: () => void;
+  /** Treat recorded by the last wheel_spin event, so a past win survives page reloads. */
+  persistedTreatLabel: string | null;
+  /** Called once a spin finishes revealing its result — the parent records the spin (and its treat) in the event log. */
+  onSpun: (treat: LootTableEntry | null) => void;
 }
 
 /**
@@ -23,7 +25,13 @@ interface RewardDialProps {
  * JS spin mechanics 1:1 — see scheduleTicks()/fireTick() below for the
  * "haptic" pin snap and dial-reveal for the winning-treat pulse.
  */
-export function RewardDial({ unlocked, applicationsUntilNext, lootTable, onSpun }: RewardDialProps) {
+export function RewardDial({
+  unlocked,
+  applicationsUntilNext,
+  lootTable,
+  persistedTreatLabel,
+  onSpun,
+}: RewardDialProps) {
   const dialFaceRef = useRef<SVGSVGElement>(null);
   const dialPinRef = useRef<HTMLDivElement>(null);
   const currentRotationRef = useRef(0);
@@ -92,13 +100,16 @@ export function RewardDial({ unlocked, applicationsUntilNext, lootTable, onSpun 
       const picked = pickWeightedTreat(lootTable); // Part D: reads the admin-configured loot table
       setLastTreatLabel(picked ? picked.label : null);
       setReveal(true);
-      onSpun();
+      onSpun(picked);
     }, SPIN_DURATION_MS + 60);
   }
 
   let hintText: string;
   let hintClass = '';
-  if (unlocked) {
+  if (lootTable.length === 0) {
+    // Parent already refuses to unlock with an empty table — this explains why.
+    hintText = 'Add treats in Settings to enable spins';
+  } else if (unlocked) {
     hintText = 'Reward ready — click to spin';
     hintClass = 'ready';
   } else {
@@ -106,6 +117,10 @@ export function RewardDial({ unlocked, applicationsUntilNext, lootTable, onSpun 
     hintText = `${remaining} more application${remaining === 1 ? '' : 's'} to next spin (or any rejection)`;
     hintClass = remaining <= 1 ? 'near-unlock' : '';
   }
+
+  // Local state covers the just-spun reveal; the persisted label (from the
+  // event log) covers everything after a reload.
+  const shownTreatLabel = lastTreatLabel ?? persistedTreatLabel;
 
   return (
     <div className="hud-dial">
@@ -153,7 +168,7 @@ export function RewardDial({ unlocked, applicationsUntilNext, lootTable, onSpun 
       <div className="dial-info">
         <div className="dial-title">Reward Dial</div>
         <div className={`dial-treat${reveal ? ' reveal' : ''}`} onAnimationEnd={() => setReveal(false)}>
-          {spinning ? 'Spinning…' : lastTreatLabel ? `Won: ${lastTreatLabel}` : 'No reward claimed yet'}
+          {spinning ? 'Spinning…' : shownTreatLabel ? `Won: ${shownTreatLabel}` : 'No reward claimed yet'}
         </div>
         <div className={`dial-hint${hintClass ? ` ${hintClass}` : ''}`}>{hintText}</div>
       </div>

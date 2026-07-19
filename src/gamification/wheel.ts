@@ -4,6 +4,31 @@ import { levelForXp } from './levels';
 import { countDistinctEntriesWithStatus, reachedStatusKeys } from './statusMilestones';
 
 /**
+ * The wheel's spin checkpoint, derived from the event log itself: every
+ * spin appends a 'wheel_spin' AppEvent, so "events since the last spin"
+ * is everything after the most recent one. Deriving this (instead of the
+ * separately-persisted counter this replaced) means it survives
+ * export/import round-trips, can't race between two open pages, and the
+ * last-won treat (in the event's metadata) becomes real, persistent
+ * history. Returns 0 when no spin event exists — callers fall back to
+ * the legacy stored counter in that case (see wheelState.ts).
+ */
+export function deriveLastSpunCheckpoint(events: AppEvent[]): number {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].type === 'wheel_spin') return i + 1;
+  }
+  return 0;
+}
+
+/** The treat label recorded by the most recent wheel_spin event, or null if never spun. */
+export function lastWonTreatLabel(events: AppEvent[]): string | null {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i].type === 'wheel_spin') return events[i].metadata?.treatLabel ?? null;
+  }
+  return null;
+}
+
+/**
  * Milestone rule (per PRD "Reward wheel"): unlock a spin when, since the
  * last spin, ANY of the following became newly true:
  *  - a job entry reached 'rejected' for the first time ever (every

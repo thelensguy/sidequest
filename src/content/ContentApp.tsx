@@ -15,6 +15,7 @@ import {
 import type { JobEntrySource } from '../lib/types';
 import { getCurrentCaptureSite } from './currentSite';
 import { percentFromClientY } from './bubblePosition';
+import { validateJobUrl } from '../lib/urlValidation';
 
 type PanelState =
   | { phase: 'closed' }
@@ -105,6 +106,24 @@ export function ContentApp({ host }: ContentAppProps) {
     if (!trimmed.company || !trimmed.role || !trimmed.url) return;
 
     const source = state.source;
+
+    // Same http(s)-only rule as every other save path (popup, dashboard
+    // add/edit, both import paths) — the URL field here is user-editable,
+    // and whatever it holds later renders as a live clickable href in
+    // JobRow, so a pasted javascript:/data: URL must be rejected here too.
+    const safeUrl = validateJobUrl(trimmed.url);
+    if (safeUrl === null) {
+      setState({
+        phase: 'error',
+        draft: trimmed,
+        statuses: getFieldStatuses(trimmed),
+        source,
+        message: 'Job URL must be a valid http(s) link.',
+      });
+      return;
+    }
+    trimmed.url = safeUrl;
+
     isSavingRef.current = true;
     setState({ phase: 'saving', draft: trimmed, statuses: getFieldStatuses(trimmed), source });
 

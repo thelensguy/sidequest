@@ -1142,6 +1142,12 @@ svg.i {
   color: var(--s-rejected);
   border-color: var(--s-rejected);
 }
+/* Armed first-click state of the inline two-stage delete confirm. */
+.quest-delete.confirming {
+  color: var(--s-rejected);
+  border-color: var(--s-rejected);
+  background: rgba(225, 123, 118, 0.12);
+}
 
 .stale-badge {
   display: inline-flex;
@@ -1381,4 +1387,15 @@ footer.foot {
 .import-errors ul {
   margin: 6px 0 0;
   padding-left: 18px;
+}
+
+/* Inline destructive-action confirm (replaces window.confirm, which Chrome
+   suppresses when the page isn't the active tab). */
+.confirm-box {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--s-interviewing);
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--text);
 }

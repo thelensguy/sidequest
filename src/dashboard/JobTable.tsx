@@ -22,10 +22,11 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
     () => new Set(STATUS_ORDER)
   );
 
-  // Most recently added first.
+  // Most recently added first. dateAdded is always toISOString() output
+  // (UTC, fixed-width), so plain string comparison sorts identically to
+  // parsing into Dates — without two Date allocations per comparison.
   const sorted = useMemo(
-    () =>
-      [...entries].sort((a, b) => new Date(b.dateAdded).getTime() - new Date(a.dateAdded).getTime()),
+    () => [...entries].sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
     [entries]
   );
 
@@ -84,7 +85,9 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
             <div className="empty-state" style={{ display: 'block' }}>
               {statusFilter.size === 0
                 ? 'No statuses selected — check a status to see quests.'
-                : 'No quests match your search.'}
+                : query.trim()
+                  ? 'No quests match your search.'
+                  : 'No quests match the current status filter.'}
             </div>
           )}
         </>

@@ -1,7 +1,68 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { applicationsUntilNextMilestone, pickWeightedTreat, shouldUnlockWheel } from '../wheel';
-import { statusChange } from './testUtils';
+import {
+  applicationsUntilNextMilestone,
+  deriveLastSpunCheckpoint,
+  lastWonTreatLabel,
+  pickWeightedTreat,
+  shouldUnlockWheel,
+} from '../wheel';
+import { makeEvent, statusChange } from './testUtils';
+import type { AppEvent } from '../../lib/types';
 import type { LootTableEntry } from '../../lib/types';
+
+function wheelSpin(treatLabel?: string): AppEvent {
+  const event = makeEvent('wheel_spin');
+  return treatLabel ? { ...event, metadata: { treatLabel } } : event;
+}
+
+describe('deriveLastSpunCheckpoint', () => {
+  it('is 0 with no events', () => {
+    expect(deriveLastSpunCheckpoint([])).toBe(0);
+  });
+
+  it('is 0 when no wheel_spin event exists', () => {
+    expect(deriveLastSpunCheckpoint([statusChange('applied'), statusChange('rejected')])).toBe(0);
+  });
+
+  it('points just past the only wheel_spin event', () => {
+    const events = [statusChange('applied'), wheelSpin(), statusChange('rejected')];
+    expect(deriveLastSpunCheckpoint(events)).toBe(2);
+  });
+
+  it('uses the most recent wheel_spin when there are several', () => {
+    const events = [wheelSpin(), statusChange('applied'), wheelSpin(), statusChange('rejected')];
+    expect(deriveLastSpunCheckpoint(events)).toBe(3);
+  });
+
+  it('locks the wheel immediately after a spin (checkpoint covers everything before it)', () => {
+    const events = [statusChange('rejected'), wheelSpin()];
+    expect(shouldUnlockWheel(events, deriveLastSpunCheckpoint(events))).toBe(false);
+  });
+
+  it('a new rejection after the spin re-unlocks the wheel', () => {
+    const events = [
+      statusChange('rejected', undefined, undefined, 'job-1'),
+      wheelSpin(),
+      statusChange('rejected', undefined, undefined, 'job-2'),
+    ];
+    expect(shouldUnlockWheel(events, deriveLastSpunCheckpoint(events))).toBe(true);
+  });
+});
+
+describe('lastWonTreatLabel', () => {
+  it('is null when never spun', () => {
+    expect(lastWonTreatLabel([statusChange('applied')])).toBeNull();
+  });
+
+  it('returns the most recent spin\'s treat', () => {
+    const events = [wheelSpin('Get boba'), statusChange('applied'), wheelSpin('Take a walk')];
+    expect(lastWonTreatLabel(events)).toBe('Take a walk');
+  });
+
+  it('is null for a spin recorded without a treat', () => {
+    expect(lastWonTreatLabel([wheelSpin()])).toBeNull();
+  });
+});
 
 describe('shouldUnlockWheel', () => {
   it('is false with no events', () => {
