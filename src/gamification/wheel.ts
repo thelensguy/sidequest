@@ -1,5 +1,6 @@
 import type { AppEvent, LootTableEntry } from '../lib/types';
-import { computeXp } from './xp';
+import { DEFAULT_WHEEL_CADENCE } from '../lib/storage';
+import { computeXpWithKeys } from './xp';
 import { levelForXp } from './levels';
 import { countDistinctEntriesWithStatus, reachedStatusKeys } from './statusMilestones';
 
@@ -28,6 +29,12 @@ export function lastWonTreatLabel(events: AppEvent[]): string | null {
   return null;
 }
 
+export interface WheelStatus {
+  unlocked: boolean;
+  /** Countdown to the next every-N-applications milestone, in [1, cadence]. */
+  applicationsUntilNext: number;
+}
+
 /**
  * Milestone rule (per PRD "Reward wheel"): unlock a spin when, since the
  * last spin, ANY of the following became newly true:
@@ -38,92 +45,92 @@ export function lastWonTreatLabel(events: AppEvent[]): string | null {
  *    reachedStatusKeys() in statusMilestones.ts, which both this and
  *    xp.ts rely on to guard against exactly that kind of farming.
  *  - the job seeker leveled up (every level-up unlocks a spin)
- *  - a new multiple-of-5 "applied" milestone was crossed (5th, 10th, 15th...
- *    distinct application — counting job entries that have ever reached
- *    'applied', not raw status_change events)
+ *  - a new multiple-of-`milestoneEvery` "applied" milestone was crossed
+ *    (counting distinct job entries that have ever reached 'applied', not
+ *    raw status_change events). The cadence is user-configurable from the
+ *    Options page; 5 is the default.
+ *
+ * The countdown (applicationsUntilNext) deliberately ignores the
+ * rejection/level-up unlock paths: those are "any moment" triggers with no
+ * meaningful countdown, so the HUD's hint text is specifically about the
+ * applications milestone. It's always in [1, cadence]: cadence right after
+ * a spin, counting down as applications land, wrapping the instant a
+ * milestone is crossed (at which point `unlocked` is what matters).
  *
  * `lastSpunAtEventCount` is the length of the events array at the time of
- * the last spin (0 if never spun). Passing the full current `events` array
- * plus that count lets this stay a pure function with no hidden state —
- * callers (the UI) are responsible for persisting the count after a spin.
+ * the last spin (0 if never spun) — normally derived from the log via
+ * deriveLastSpunCheckpoint(). Events are assumed append-only in
+ * chronological order, matching src/lib/storage.ts's appendEvent behavior,
+ * so slicing by count is a valid way to isolate "events since last spin."
  *
- * Events are assumed append-only in chronological order, matching
- * src/lib/storage.ts's appendEvent behavior, so slicing by count is a valid
- * way to isolate "events since last spin."
+ * Both checks share one computation of the (entry, status) reach-sets —
+ * with logs at import scale (thousands of events), rebuilding those sets
+ * per check was the panel's dominant refresh cost.
  */
-export function shouldUnlockWheel(
+export function deriveWheelStatus(
   events: AppEvent[],
-  lastSpunAtEventCount: number
-): boolean {
+  lastSpunAtEventCount: number,
+  milestoneEvery: number = DEFAULT_WHEEL_CADENCE
+): WheelStatus {
+  const cadence = Math.max(1, Math.floor(milestoneEvery));
   const clampedCount = Math.max(0, Math.min(lastSpunAtEventCount, events.length));
   const priorEvents = events.slice(0, clampedCount);
-  const newEvents = events.slice(clampedCount);
-
-  if (newEvents.length === 0) {
-    return false;
-  }
 
   const priorKeys = reachedStatusKeys(priorEvents);
   const currentKeys = reachedStatusKeys(events);
+
+  const priorApplied = countDistinctEntriesWithStatus(priorKeys, 'applied');
+  const currentApplied = countDistinctEntriesWithStatus(currentKeys, 'applied');
+  const sinceLastSpin = Math.max(0, currentApplied - priorApplied);
+  const remainder = sinceLastSpin % cadence;
+  const applicationsUntilNext = remainder === 0 ? cadence : cadence - remainder;
+
+  if (events.length === clampedCount) {
+    return { unlocked: false, applicationsUntilNext };
+  }
 
   // Rejection milestone: a job entry reached 'rejected' for the first time
   // within this window — not just any 'rejected' status_change event.
   for (const key of currentKeys) {
     if (key.endsWith(':rejected') && !priorKeys.has(key)) {
-      return true;
+      return { unlocked: true, applicationsUntilNext };
     }
   }
 
   // Level-up milestone. Naturally immune to farming now that computeXp
   // itself dedupes per (entry, status) — toggling doesn't grow XP.
-  const priorLevel = levelForXp(computeXp(priorEvents)).level;
-  const currentLevel = levelForXp(computeXp(events)).level;
+  const priorLevel = levelForXp(computeXpWithKeys(priorEvents, priorKeys)).level;
+  const currentLevel = levelForXp(computeXpWithKeys(events, currentKeys)).level;
   if (currentLevel > priorLevel) {
-    return true;
+    return { unlocked: true, applicationsUntilNext };
   }
 
-  // Every-5-applications milestone, counting distinct entries that have
-  // ever reached 'applied', not raw status_change events.
-  const priorMilestones = Math.floor(countDistinctEntriesWithStatus(priorKeys, 'applied') / 5);
-  const currentMilestones = Math.floor(countDistinctEntriesWithStatus(currentKeys, 'applied') / 5);
+  // Every-N-applications milestone.
+  const priorMilestones = Math.floor(priorApplied / cadence);
+  const currentMilestones = Math.floor(currentApplied / cadence);
   if (currentMilestones > priorMilestones) {
-    return true;
+    return { unlocked: true, applicationsUntilNext };
   }
 
-  return false;
+  return { unlocked: false, applicationsUntilNext };
 }
 
-/**
- * Goal Gradient countdown: how many more distinct "applied" entries are
- * needed to cross the next every-5-applications milestone, counting only
- * applications reached since `lastSpunAtEventCount` — the same window
- * shouldUnlockWheel() uses for its own every-5 check, so this stays
- * consistent with when the wheel actually unlocks.
- *
- * Deliberately ignores the rejection/level-up unlock paths: those are
- * "any moment" triggers with no meaningful countdown, so the HUD's
- * countdown text is specifically about the applications milestone (the
- * mockup's dial-hint text mirrors this — "N more applications to next
- * spin (or any rejection)").
- *
- * Always returns a value in [1, 5]: 5 right after a spin (or if nothing's
- * happened yet), counting down as applications land, wrapping back to 5
- * the instant a multiple of 5 is crossed (at which point the caller should
- * be reading shouldUnlockWheel() as true anyway, not this countdown).
- */
+/** Convenience wrapper over deriveWheelStatus — see its doc comment for the full rule. */
+export function shouldUnlockWheel(
+  events: AppEvent[],
+  lastSpunAtEventCount: number,
+  milestoneEvery: number = DEFAULT_WHEEL_CADENCE
+): boolean {
+  return deriveWheelStatus(events, lastSpunAtEventCount, milestoneEvery).unlocked;
+}
+
+/** Convenience wrapper over deriveWheelStatus — see its doc comment for the full rule. */
 export function applicationsUntilNextMilestone(
   events: AppEvent[],
-  lastSpunAtEventCount: number
+  lastSpunAtEventCount: number,
+  milestoneEvery: number = DEFAULT_WHEEL_CADENCE
 ): number {
-  const clampedCount = Math.max(0, Math.min(lastSpunAtEventCount, events.length));
-  const priorEvents = events.slice(0, clampedCount);
-
-  const priorApplied = countDistinctEntriesWithStatus(reachedStatusKeys(priorEvents), 'applied');
-  const currentApplied = countDistinctEntriesWithStatus(reachedStatusKeys(events), 'applied');
-  const sinceLastSpin = Math.max(0, currentApplied - priorApplied);
-
-  const remainder = sinceLastSpin % 5;
-  return remainder === 0 ? 5 : 5 - remainder;
+  return deriveWheelStatus(events, lastSpunAtEventCount, milestoneEvery).applicationsUntilNext;
 }
 
 /**

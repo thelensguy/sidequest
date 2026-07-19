@@ -35,8 +35,15 @@ async function mount() {
     isBubbleHiddenUntilRestart().catch(() => false),
   ]);
   const site = getCurrentCaptureSite();
-  const hiddenOnThisSite = site !== null && settings.hiddenDomains.includes(site);
-  if (hiddenUntilRestart || settings.hiddenGlobally || hiddenOnThisSite) return;
+  const hiddenBySettings =
+    settings.hiddenGlobally || (site !== null && settings.hiddenDomains.includes(site));
+
+  // Mount even when hidden (ContentApp renders null) rather than bailing
+  // out: ContentApp watches bubbleSettings via storage.onChanged, so
+  // re-enabling the bubble from the Options page takes effect on
+  // already-open tabs without a reload. Only the session-scoped "hide
+  // until restart" is final for this page's lifetime — Options has no
+  // control that clears it; it self-clears when the browser restarts.
 
   // Re-check after the awaits above — unlike the synchronous version this
   // replaced, another invocation now has a window to mount first.
@@ -68,9 +75,20 @@ async function mount() {
 
   createRoot(mountPoint).render(
     <React.StrictMode>
-      <ContentApp host={host} />
+      <ContentApp
+        host={host}
+        initialSettingsHidden={hiddenBySettings}
+        initialSessionHidden={hiddenUntilRestart}
+      />
     </React.StrictMode>
   );
+}
+
+/** True when this node is, or contains, a top-layer candidate (native dialog / Popover API element). */
+function involvesTopLayerElement(node: Node, host: HTMLElement): boolean {
+  if (!(node instanceof Element) || node === host) return false;
+  if (node.tagName === 'DIALOG' || node.hasAttribute('popover')) return true;
+  return node.querySelector?.('dialog, [popover]') !== null;
 }
 
 /**
@@ -85,9 +103,13 @@ async function mount() {
  * Elements stack within the top layer in the order they were shown, most
  * recent on top — so a <dialog> opened *after* we first show our popover
  * would still end up above us. The MutationObserver below re-bumps our
- * popover (hide, then show again) whenever the page's DOM changes, which
- * covers a modal mounting after us without needing to know that specific
- * site's markup.
+ * popover (hide, then show again) when a top-layer candidate enters the
+ * DOM or gets opened. An earlier version re-bumped on EVERY childList
+ * mutation, which on an infinite-scroll job feed meant a hide/show cycle
+ * per scroll burst for the lifetime of the page — this one only reacts to
+ * mutations actually involving a dialog/popover element, additionally
+ * watches the `open`/`popover` attributes (showModal() on a pre-existing
+ * <dialog> adds no nodes at all), and pauses while the tab is hidden.
  */
 function promoteAboveNativeModals(host: HTMLElement) {
   if (typeof host.showPopover !== 'function') return; // unsupported browser: no-op, z-index-only behavior unchanged
@@ -96,16 +118,56 @@ function promoteAboveNativeModals(host: HTMLElement) {
   host.showPopover();
 
   let rebumpTimer: ReturnType<typeof setTimeout> | undefined;
-  const observer = new MutationObserver(() => {
-    // Debounce: a modal mounting touches many nodes in one burst: only
-    // re-bump once per burst, not once per mutated node.
+
+  function scheduleRebump() {
+    // Debounce: a modal mounting touches many nodes in one burst — re-bump
+    // once per burst, not once per mutated node.
     if (rebumpTimer !== undefined) clearTimeout(rebumpTimer);
     rebumpTimer = setTimeout(() => {
       if (host.matches(':popover-open')) host.hidePopover();
       host.showPopover();
     }, 150);
+  }
+
+  const observer = new MutationObserver((mutations) => {
+    for (const mutation of mutations) {
+      if (mutation.type === 'attributes') {
+        if (involvesTopLayerElement(mutation.target, host)) {
+          scheduleRebump();
+          return;
+        }
+        continue;
+      }
+      for (const node of mutation.addedNodes) {
+        if (involvesTopLayerElement(node, host)) {
+          scheduleRebump();
+          return;
+        }
+      }
+    }
   });
-  observer.observe(document.body, { childList: true, subtree: true });
+
+  function observe() {
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['open', 'popover'],
+    });
+  }
+  observe();
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      observer.disconnect();
+      if (rebumpTimer !== undefined) clearTimeout(rebumpTimer);
+    } else {
+      // One catch-up bump for anything that opened while we weren't
+      // watching, then resume.
+      scheduleRebump();
+      observe();
+    }
+  });
 }
 
 if (document.body) {

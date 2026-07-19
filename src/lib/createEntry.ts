@@ -1,4 +1,4 @@
-import { addJobEntry, appendEvent } from '../lib/storage';
+import { addJobEntries, addJobEntry, appendEvent, appendEvents } from '../lib/storage';
 import type { ApplicationStatus, JobEntry } from '../lib/types';
 
 export interface NewJobEntryInput {
@@ -39,4 +39,39 @@ export async function createJobEntry(
   });
 
   return entry;
+}
+
+/**
+ * Bulk counterpart to createJobEntry, for the paste-a-spreadsheet import:
+ * all rows land in two storage writes (entries, then their events) instead
+ * of a full read-modify-write of the growing array per row.
+ */
+export async function createJobEntries(
+  inputs: NewJobEntryInput[],
+  eventType: 'manual_add' | 'import'
+): Promise<JobEntry[]> {
+  if (inputs.length === 0) return [];
+  const now = new Date().toISOString();
+
+  const entries = await addJobEntries(
+    inputs.map((input) => ({
+      company: input.company,
+      role: input.role,
+      url: input.url,
+      status: input.status,
+      dateAdded: input.dateAdded,
+      lastUpdated: now,
+      source: eventType === 'import' ? ('import' as const) : ('manual' as const),
+    }))
+  );
+
+  await appendEvents(
+    entries.map((entry) => ({
+      type: eventType,
+      jobEntryId: entry.id,
+      timestamp: now,
+    }))
+  );
+
+  return entries;
 }

@@ -2,9 +2,23 @@ import { useEffect, useRef, useState } from 'react';
 import type { LootTableEntry } from '../lib/types';
 import { pickWeightedTreat } from './wheel';
 
-const SEGMENTS = 8;
-const SEGMENT_ANGLE = 360 / SEGMENTS;
 const SPIN_DURATION_MS = 3400;
+
+/** Segment-boundary tick marks around the dial face, radius 20 to 28 from center (32, 32). */
+function segmentLines(segments: number): Array<{ x1: number; y1: number; x2: number; y2: number }> {
+  return Array.from({ length: segments }, (_, i) => {
+    const angle = (i / segments) * 2 * Math.PI;
+    const sin = Math.sin(angle);
+    const cos = Math.cos(angle);
+    const round = (n: number) => Math.round(n * 10) / 10;
+    return {
+      x1: round(32 + 20 * sin),
+      y1: round(32 - 20 * cos),
+      x2: round(32 + 28 * sin),
+      y2: round(32 - 28 * cos),
+    };
+  });
+}
 
 interface RewardDialProps {
   unlocked: boolean;
@@ -41,6 +55,11 @@ export function RewardDial({
   const [lastTreatLabel, setLastTreatLabel] = useState<string | null>(null);
   const [reveal, setReveal] = useState(false);
 
+  // One segment per treat, so the dial visually matches the actual odds
+  // space (min 2 — a zero/one-treat dial still needs a drawable face).
+  const segments = Math.max(2, lootTable.length);
+  const segmentAngle = 360 / segments;
+
   useEffect(() => {
     return () => {
       tickTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
@@ -64,7 +83,7 @@ export function RewardDial({
     tickTimeoutsRef.current.forEach((id) => window.clearTimeout(id));
     tickTimeoutsRef.current = [];
 
-    const totalTicks = Math.floor(totalRotationDeg / SEGMENT_ANGLE);
+    const totalTicks = Math.floor(totalRotationDeg / segmentAngle);
     for (let i = 1; i <= totalTicks; i++) {
       const progress = i / totalTicks;
       const eased = 1 - Math.pow(1 - progress, 3); // ease-out timing
@@ -83,10 +102,10 @@ export function RewardDial({
     setSpinning(true);
     setReveal(false);
 
-    const landingSegment = Math.floor(Math.random() * SEGMENTS);
+    const landingSegment = Math.floor(Math.random() * segments);
     const extraSpins = 5 + Math.floor(Math.random() * 3); // 5-7 full rotations
-    const jitter = (Math.random() - 0.5) * (SEGMENT_ANGLE * 0.3);
-    const totalRotation = extraSpins * 360 + landingSegment * SEGMENT_ANGLE + jitter;
+    const jitter = (Math.random() - 0.5) * (segmentAngle * 0.3);
+    const totalRotation = extraSpins * 360 + landingSegment * segmentAngle + jitter;
 
     currentRotationRef.current += totalRotation;
     if (dialFaceRef.current) {
@@ -139,14 +158,9 @@ export function RewardDial({
         <svg className="dial-face" ref={dialFaceRef} viewBox="0 0 64 64">
           <circle cx="32" cy="32" r="31" fill="var(--bg)" stroke="var(--border)" strokeWidth={1} />
           <g stroke="var(--border-subtle)" strokeWidth={1}>
-            <line x1="32" y1="4" x2="32" y2="12" />
-            <line x1="52.4" y1="11.6" x2="47.1" y2="16.9" />
-            <line x1="60" y1="32" x2="52" y2="32" />
-            <line x1="52.4" y1="52.4" x2="47.1" y2="47.1" />
-            <line x1="32" y1="60" x2="32" y2="52" />
-            <line x1="11.6" y1="52.4" x2="16.9" y2="47.1" />
-            <line x1="4" y1="32" x2="12" y2="32" />
-            <line x1="11.6" y1="11.6" x2="16.9" y2="16.9" />
+            {segmentLines(segments).map((line, i) => (
+              <line key={i} x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} />
+            ))}
           </g>
           <g
             className="dial-center-icon"

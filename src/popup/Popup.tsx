@@ -1,7 +1,7 @@
 import { useRef, useState, type CSSProperties, type FormEvent } from 'react';
 import { type ActiveTabInfo, captureFromTab, getActiveTab, isCompleteJob } from '../capture/capture';
 import type { ExtractedJob } from '../capture/adapters';
-import { addJobEntry, appendEvent } from '../lib/storage';
+import { addJobEntry, appendEvent, getJobEntries } from '../lib/storage';
 import type { AppEventType, JobEntry, JobEntrySource } from '../lib/types';
 import { validateJobUrl } from '../lib/urlValidation';
 import { CheckCircleIcon, ExternalLinkIcon, ShieldIcon, XCircleIcon } from '../components/icons';
@@ -10,10 +10,21 @@ type ViewState =
   | { phase: 'idle' }
   | { phase: 'capturing' }
   | { phase: 'saved'; entry: JobEntry }
+  | { phase: 'duplicate'; entry: JobEntry }
   | { phase: 'manual'; tab: ActiveTabInfo }
   | { phase: 'error'; message: string };
 
 const EMPTY_DRAFT: ExtractedJob = { company: '', role: '', url: '' };
+
+/**
+ * The already-tracked entry matching this URL, if any. Exact-match on the
+ * stored URL — adapters canonicalize LinkedIn/Indeed links at capture
+ * time, so re-capturing the same posting produces the same string. Blank
+ * URLs never match (two lost links aren't the same job).
+ */
+function findDuplicate(entries: JobEntry[], url: string): JobEntry | undefined {
+  return url ? entries.find((entry) => entry.url === url) : undefined;
+}
 
 /**
  * Shared save path for both the automatic (adapter-matched) capture and
@@ -90,11 +101,17 @@ export function Popup() {
         // just echoes `doc.location.href`).
         const safeUrl = validateJobUrl(job.url);
         if (safeUrl !== null) {
+          const existing = findDuplicate(await getJobEntries(), safeUrl);
+          if (existing) {
+            // Already tracked — show which entry, don't save it twice.
+            setState({ phase: 'duplicate', entry: existing });
+            return;
+          }
           const entry = await saveEntry({ ...job, url: safeUrl }, source, 'capture');
           setState({ phase: 'saved', entry });
           // Stay locked: the primary button is hidden once phase is
-          // 'saved', and handleReset() clears the guard when the user
-          // moves on via "Capture another".
+          // 'saved'/'duplicate', and handleReset() clears the guard when
+          // the user moves on via "Capture another".
           return;
         }
       }
@@ -134,6 +151,13 @@ export function Popup() {
     const safeUrl = validateJobUrl(draft.url);
     if (safeUrl === null) {
       setManualUrlError('Link must be a valid http(s) URL.');
+      return;
+    }
+    const existing = findDuplicate(await getJobEntries(), safeUrl);
+    if (existing) {
+      setManualUrlError(
+        `Already in your tracker — "${existing.role}" at ${existing.company || 'unknown company'}.`
+      );
       return;
     }
     setManualUrlError(null);
@@ -183,7 +207,7 @@ export function Popup() {
         </button>
       </div>
 
-      {state.phase !== 'manual' && state.phase !== 'saved' && (
+      {state.phase !== 'manual' && state.phase !== 'saved' && state.phase !== 'duplicate' && (
         <button
           type="button"
           onClick={handleCapture}
@@ -198,6 +222,14 @@ export function Popup() {
         <p style={styles.success} role="status">
           <CheckCircleIcon style={styles.statusIcon} />
           Saved &ldquo;{state.entry.role}&rdquo; at {state.entry.company || '(unknown company)'}.
+        </p>
+      )}
+
+      {state.phase === 'duplicate' && (
+        <p style={styles.success} role="status">
+          <CheckCircleIcon style={styles.statusIcon} />
+          Already in your tracker &mdash; &ldquo;{state.entry.role}&rdquo; at{' '}
+          {state.entry.company || '(unknown company)'}.
         </p>
       )}
 
@@ -264,7 +296,7 @@ export function Popup() {
         </form>
       )}
 
-      {state.phase === 'saved' && (
+      {(state.phase === 'saved' || state.phase === 'duplicate') && (
         <button type="button" style={styles.secondaryButton} onClick={handleReset}>
           Capture another
         </button>

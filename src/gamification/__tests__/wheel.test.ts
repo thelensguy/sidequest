@@ -2,6 +2,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import {
   applicationsUntilNextMilestone,
   deriveLastSpunCheckpoint,
+  deriveWheelStatus,
   lastWonTreatLabel,
   pickWeightedTreat,
   shouldUnlockWheel,
@@ -46,6 +47,23 @@ describe('deriveLastSpunCheckpoint', () => {
       statusChange('rejected', undefined, undefined, 'job-2'),
     ];
     expect(shouldUnlockWheel(events, deriveLastSpunCheckpoint(events))).toBe(true);
+  });
+});
+
+describe('deriveWheelStatus with a custom cadence', () => {
+  it('unlocks at the 3rd distinct application when cadence is 3', () => {
+    const events = Array.from({ length: 3 }, (_, i) =>
+      statusChange('applied', undefined, undefined, `job-${i}`)
+    );
+    expect(deriveWheelStatus(events, 2, 3).unlocked).toBe(true);
+    // Default cadence of 5 would still be locked at 3 applications.
+    expect(deriveWheelStatus(events, 2).unlocked).toBe(false);
+  });
+
+  it('counts down within the configured cadence', () => {
+    const events = [statusChange('applied', undefined, undefined, 'job-0')];
+    expect(deriveWheelStatus(events, 0, 3).applicationsUntilNext).toBe(2);
+    expect(deriveWheelStatus([], 0, 3).applicationsUntilNext).toBe(3);
   });
 });
 

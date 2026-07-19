@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { STATUS_ORDER, type ApplicationStatus, type JobEntry } from '../lib/types';
+import { linkHost } from '../lib/urlValidation';
 import { JobRow } from './JobRow';
 import { SearchIcon, SwordIcon } from '../components/icons';
 import { StatusFilterDropdown } from './StatusFilterDropdown';
@@ -8,6 +9,32 @@ interface JobTableProps {
   entries: JobEntry[];
   onChanged: () => void;
 }
+
+type SortOrder = 'newest' | 'updated' | 'stalest' | 'company';
+
+const SORT_LABELS: Record<SortOrder, string> = {
+  newest: 'Newest first',
+  updated: 'Recently updated',
+  stalest: 'Stalest first',
+  company: 'Company A–Z',
+};
+
+// Timestamps are always toISOString() output (UTC, fixed-width), so plain
+// string comparison sorts identically to parsing into Dates — without two
+// Date allocations per comparison.
+const COMPARATORS: Record<SortOrder, (a: JobEntry, b: JobEntry) => number> = {
+  newest: (a, b) => b.dateAdded.localeCompare(a.dateAdded),
+  updated: (a, b) => b.lastUpdated.localeCompare(a.lastUpdated),
+  stalest: (a, b) => a.lastUpdated.localeCompare(b.lastUpdated),
+  company: (a, b) => a.company.localeCompare(b.company),
+};
+
+/**
+ * Rows rendered before the "Show more" button appears. The JSON import
+ * cap permits up to 20,000 entries, which would be an unusable DOM if
+ * rendered unconditionally; normal usage (hundreds) never sees the button.
+ */
+const PAGE_SIZE = 100;
 
 /** Scrolls to and focuses the "Add entry" form's first field. */
 function focusAddEntryForm() {
@@ -21,13 +48,12 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
   const [statusFilter, setStatusFilter] = useState<Set<ApplicationStatus>>(
     () => new Set(STATUS_ORDER)
   );
+  const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
+  const [renderLimit, setRenderLimit] = useState(PAGE_SIZE);
 
-  // Most recently added first. dateAdded is always toISOString() output
-  // (UTC, fixed-width), so plain string comparison sorts identically to
-  // parsing into Dates — without two Date allocations per comparison.
   const sorted = useMemo(
-    () => [...entries].sort((a, b) => b.dateAdded.localeCompare(a.dateAdded)),
-    [entries]
+    () => [...entries].sort(COMPARATORS[sortOrder]),
+    [entries, sortOrder]
   );
 
   const visible = useMemo(() => {
@@ -36,11 +62,15 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
       const matchesQuery =
         !normalizedQuery ||
         entry.company.toLowerCase().includes(normalizedQuery) ||
-        entry.role.toLowerCase().includes(normalizedQuery);
+        entry.role.toLowerCase().includes(normalizedQuery) ||
+        linkHost(entry.url).toLowerCase().includes(normalizedQuery);
       const matchesStatus = statusFilter.has(entry.status);
       return matchesQuery && matchesStatus;
     });
   }, [sorted, query, statusFilter]);
+
+  const rendered = visible.slice(0, renderLimit);
+  const remaining = visible.length - rendered.length;
 
   return (
     <section className="quest-log">
@@ -63,6 +93,18 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
             />
           </div>
           <StatusFilterDropdown selected={statusFilter} onChange={setStatusFilter} />
+          <select
+            className="sort-select"
+            value={sortOrder}
+            onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+            aria-label="Sort quests"
+          >
+            {(Object.keys(SORT_LABELS) as SortOrder[]).map((order) => (
+              <option key={order} value={order}>
+                {SORT_LABELS[order]}
+              </option>
+            ))}
+          </select>
           <button className="btn-primary" type="button" onClick={focusAddEntryForm}>
             <SwordIcon />
             Log a Quest
@@ -77,10 +119,19 @@ export function JobTable({ entries, onChanged }: JobTableProps) {
       ) : (
         <>
           <div className="quest-list">
-            {visible.map((entry) => (
+            {rendered.map((entry) => (
               <JobRow key={entry.id} entry={entry} onChanged={onChanged} />
             ))}
           </div>
+          {remaining > 0 && (
+            <button
+              type="button"
+              className="show-more-btn"
+              onClick={() => setRenderLimit((limit) => limit + PAGE_SIZE)}
+            >
+              Show {Math.min(PAGE_SIZE, remaining)} more ({remaining} remaining)
+            </button>
+          )}
           {visible.length === 0 && (
             <div className="empty-state" style={{ display: 'block' }}>
               {statusFilter.size === 0

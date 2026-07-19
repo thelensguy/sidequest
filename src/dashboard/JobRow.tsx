@@ -4,18 +4,10 @@ import { appendEvent, deleteJobEntry, getEvents, updateJobEntry } from '../lib/s
 import { computeXp } from '../gamification/xp';
 import { isStaleEntry, daysSince } from './staleness';
 import { EditableField } from './EditableField';
-import { validateJobUrl } from '../lib/urlValidation';
+import { linkHost, validateJobUrl } from '../lib/urlValidation';
 import { formatMetaDateRange } from '../lib/dateUtils';
 import { ExternalLinkIcon, XIcon } from '../components/icons';
 import { STATUS_ICON, STATUS_TAG_LABEL } from './statusMeta';
-
-function linkHost(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, '');
-  } catch {
-    return '';
-  }
-}
 
 interface JobRowProps {
   entry: JobEntry;

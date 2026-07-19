@@ -59,6 +59,16 @@ const STATUS_CHANGE_XP: Partial<Record<ApplicationStatus, number>> = {
  * they've already fetched via storage.getEvents().
  */
 export function computeXp(events: AppEvent[]): number {
+  return computeXpWithKeys(events, reachedStatusKeys(events));
+}
+
+/**
+ * Same as computeXp, but with the (entry, status) reach-set supplied by
+ * the caller — for callers like wheel.ts's deriveWheelStatus that already
+ * built the set for their own checks and shouldn't pay for a second full
+ * pass over the log to rebuild it.
+ */
+export function computeXpWithKeys(events: AppEvent[], reachedKeys: Set<string>): number {
   const creationXp = events.reduce((total, event) => {
     switch (event.type) {
       case 'capture':
@@ -72,7 +82,6 @@ export function computeXp(events: AppEvent[]): number {
     }
   }, 0);
 
-  const reachedKeys = reachedStatusKeys(events);
   const statusXp = (Object.keys(STATUS_CHANGE_XP) as ApplicationStatus[]).reduce(
     (total, status) =>
       total + countDistinctEntriesWithStatus(reachedKeys, status) * (STATUS_CHANGE_XP[status] ?? 0),

@@ -933,6 +933,48 @@ svg.i {
   margin: 4px 2px;
 }
 
+.sort-select {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.sort-select:hover {
+  border-color: var(--text-3);
+}
+.sort-select:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+}
+.sort-select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.show-more-btn {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 9px 12px;
+  font-family: var(--sans);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-2);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.show-more-btn:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
 .btn-primary {
   display: inline-flex;
   align-items: center;

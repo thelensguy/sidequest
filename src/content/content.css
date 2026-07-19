@@ -52,6 +52,9 @@
   border-right-width: 0;
   color: var(--accent);
   cursor: pointer;
+  /* Without this, a touch drag on the bubble scrolls the page instead of
+     firing the pointermove events the drag handler needs. */
+  touch-action: none;
   box-shadow: -4px 0 16px rgba(0, 0, 0, 0.45);
   transition:
     border-color 0.12s ease,

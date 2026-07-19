@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
+  addJobEntries,
+  appendEvents,
   getBubbleSettings,
   getEvents,
   getJobEntries,
@@ -100,6 +102,55 @@ describe('setJobEntries / setEvents (chrome.storage.local)', () => {
     await setEvents([second]);
 
     expect(await getEvents()).toEqual([second]);
+  });
+});
+
+describe('addJobEntries / appendEvents (bulk append)', () => {
+  const base: Omit<JobEntry, 'id'> = {
+    company: 'Acme',
+    role: 'Engineer',
+    url: '',
+    status: 'saved',
+    dateAdded: '2026-01-01T00:00:00.000Z',
+    lastUpdated: '2026-01-01T00:00:00.000Z',
+    source: 'import',
+  };
+
+  it('appends all entries after the existing ones, generating ids', async () => {
+    await setJobEntries([{ ...base, id: 'existing' }]);
+    const added = await addJobEntries([
+      { ...base, company: 'Globex' },
+      { ...base, company: 'Initech' },
+    ]);
+
+    expect(added).toHaveLength(2);
+    expect(added[0].id).toBeTruthy();
+    expect(added[0].id).not.toBe(added[1].id);
+
+    const all = await getJobEntries();
+    expect(all.map((e) => e.company)).toEqual(['Acme', 'Globex', 'Initech']);
+  });
+
+  it('appends all events after the existing ones, generating ids', async () => {
+    await setEvents([
+      { id: 'e1', type: 'manual_add', jobEntryId: 'a', timestamp: '2026-01-01T00:00:00.000Z' },
+    ]);
+    const added = await appendEvents([
+      { type: 'import', jobEntryId: 'b', timestamp: '2026-01-02T00:00:00.000Z' },
+      { type: 'import', jobEntryId: 'c', timestamp: '2026-01-02T00:00:00.000Z' },
+    ]);
+
+    expect(added).toHaveLength(2);
+    expect(added[0].id).not.toBe(added[1].id);
+
+    const all = await getEvents();
+    expect(all.map((e) => e.jobEntryId)).toEqual(['a', 'b', 'c']);
+  });
+
+  it('bulk-appending nothing leaves storage untouched', async () => {
+    await setJobEntries([{ ...base, id: 'only' }]);
+    expect(await addJobEntries([])).toEqual([]);
+    expect((await getJobEntries()).map((e) => e.id)).toEqual(['only']);
   });
 });
 

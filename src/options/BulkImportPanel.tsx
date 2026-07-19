@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { createJobEntry } from '../lib/createEntry';
+import { createJobEntries } from '../lib/createEntry';
 import { parseBulkImport, type ParseRowError } from '../lib/parseImport';
 
 interface BulkImportPanelProps {
@@ -26,26 +26,18 @@ export function BulkImportPanel({ onImported }: BulkImportPanelProps) {
     if (rows.length === 0) return;
 
     setImporting(true);
-    let succeeded = 0;
     try {
-      // Sequential to keep each addJobEntry/appendEvent pair consistent
-      // against the same read-modify-write storage layer.
-      for (const row of rows) {
-        await createJobEntry(row, 'import');
-        succeeded++;
-      }
-      setLastImportedCount(succeeded);
+      // One bulk write for entries and one for events, instead of a full
+      // read-modify-write of the growing array per pasted row.
+      const created = await createJobEntries(rows, 'import');
+      setLastImportedCount(created.length);
       setText('');
       onImported?.();
     } catch (err) {
       const reason = err instanceof Error ? err.message : String(err);
       setImportFailure(
-        `Import stopped after a storage error: ${succeeded} of ${rows.length} row(s) were saved before it failed (${reason}).`
+        `Import failed with a storage error: ${reason}. Check the dashboard to see whether any rows landed.`
       );
-      if (succeeded > 0) {
-        setLastImportedCount(succeeded);
-        onImported?.();
-      }
     } finally {
       setImporting(false);
     }

@@ -4,11 +4,13 @@ import {
   getEvents,
   getJobEntries,
   getLootTable,
+  getWheelCadence,
   setBubbleHiddenOnDomain,
   setBubbleSettings,
   setEvents,
   setJobEntries,
   setLootTable,
+  setWheelCadence,
 } from '../lib/storage';
 import { validateExportData } from '../lib/importExport';
 import type { AppEvent, BubbleSettings, CaptureSite, JobEntry, LootTableEntry } from '../lib/types';
@@ -86,6 +88,7 @@ export function Options() {
   const [entries, setEntries] = useState<LootTableEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [newLabel, setNewLabel] = useState('');
+  const [wheelCadence, setWheelCadenceState] = useState(5);
   const lootStatus = useFlashStatus();
   const idCounterRef = useRef(0);
 
@@ -113,7 +116,15 @@ export function Options() {
       setLoading(false);
     });
     getBubbleSettings().then(setBubbleSettingsState);
+    getWheelCadence().then(setWheelCadenceState);
   }, []);
+
+  async function handleCadenceChange(next: number) {
+    setWheelCadenceState(next);
+    lootStatus.setStatus('saving');
+    await setWheelCadence(next);
+    lootStatus.flash();
+  }
 
   async function handleToggleGlobal(hiddenGlobally: boolean) {
     bubbleStatus.setStatus('saving');
@@ -321,6 +332,20 @@ export function Options() {
                 <PlusIcon />
                 Add
               </button>
+            </div>
+
+            <div className="toggle-row">
+              <span className="toggle-row-label">Unlock a spin every</span>
+              <select
+                className="tier-select"
+                value={wheelCadence}
+                onChange={(e) => handleCadenceChange(Number(e.target.value))}
+                aria-label="Applications between wheel spins"
+              >
+                <option value={3}>3 applications</option>
+                <option value={5}>5 applications</option>
+                <option value={10}>10 applications</option>
+              </select>
             </div>
 
             <StatusLine status={lootStatus.status} savingLabel="Saving…" savedLabel="Saved." />

@@ -13,6 +13,7 @@ const KEYS = {
   lootTable: 'lootTable',
   bubbleSettings: 'bubbleSettings',
   themePreference: 'themePreference',
+  wheelCadence: 'wheelCadence',
 } as const;
 
 const SESSION_KEYS = {
@@ -96,6 +97,20 @@ export async function addJobEntry(
   return full;
 }
 
+/**
+ * Appends many entries in one read + one write. Bulk import used to call
+ * addJobEntry per row, which re-reads and re-writes the entire (growing)
+ * array every time — O(n²) storage traffic for an n-row paste.
+ */
+export async function addJobEntries(
+  inputs: Array<Omit<JobEntry, 'id'> & { id?: string }>
+): Promise<JobEntry[]> {
+  const added = inputs.map((entry) => ({ ...entry, id: entry.id ?? generateId() }));
+  const entries = await getJobEntries();
+  await setLocal(KEYS.jobEntries, [...entries, ...added]);
+  return added;
+}
+
 export async function updateJobEntry(
   id: string,
   updates: Partial<Omit<JobEntry, 'id'>>
@@ -146,6 +161,16 @@ export async function appendEvent(
   events.push(full);
   await setLocal(KEYS.appEvents, events);
   return full;
+}
+
+/** Bulk counterpart to appendEvent — one read + one write, same as addJobEntries. */
+export async function appendEvents(
+  inputs: Array<Omit<AppEvent, 'id'> & { id?: string }>
+): Promise<AppEvent[]> {
+  const added = inputs.map((event) => ({ ...event, id: event.id ?? generateId() }));
+  const events = await getEvents();
+  await setLocal(KEYS.appEvents, [...events, ...added]);
+  return added;
 }
 
 // Gamification settings
@@ -209,4 +234,17 @@ export function getThemePreference(): Promise<ThemePreference> {
 
 export function setThemePreference(theme: ThemePreference): Promise<void> {
   return setLocal(KEYS.themePreference, theme);
+}
+
+// Reward wheel cadence
+
+export const DEFAULT_WHEEL_CADENCE = 5;
+
+/** How many distinct applications between wheel-spin milestones (the "every N applications" rule). */
+export function getWheelCadence(): Promise<number> {
+  return getLocal<number>(KEYS.wheelCadence, DEFAULT_WHEEL_CADENCE);
+}
+
+export function setWheelCadence(cadence: number): Promise<void> {
+  return setLocal(KEYS.wheelCadence, cadence);
 }

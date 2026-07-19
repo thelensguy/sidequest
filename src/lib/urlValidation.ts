@@ -23,3 +23,16 @@ export function validateJobUrl(raw: string): string | null {
     return null;
   }
 }
+
+/**
+ * Display-friendly hostname of a stored job link ("careers.acme.com" from
+ * the full URL), or '' when the link is blank/unparseable. Shared by
+ * JobRow's meta line and JobTable's search matching.
+ */
+export function linkHost(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}

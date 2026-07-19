@@ -1,14 +1,9 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react';
-import { appendEvent, getEvents, getLootTable } from '../lib/storage';
+import { appendEvent, getEvents, getLootTable, getWheelCadence } from '../lib/storage';
 import { computeXp } from './xp';
 import { levelForXp } from './levels';
 import { computeBadges, type Badge } from './badges';
-import {
-  applicationsUntilNextMilestone,
-  deriveLastSpunCheckpoint,
-  lastWonTreatLabel,
-  shouldUnlockWheel,
-} from './wheel';
+import { deriveLastSpunCheckpoint, deriveWheelStatus, lastWonTreatLabel } from './wheel';
 import { getLegacyLastSpunAtEventCount } from './wheelState';
 import { RewardDial } from './RewardDial';
 import { ShieldIcon, FileCheckIcon, TargetIcon, ShieldCheckIcon, TrophyIcon, FlameIcon } from '../components/icons';
@@ -100,15 +95,17 @@ export function GamificationPanel() {
   const timeoutsRef = useRef<number[]>([]);
 
   async function refresh() {
-    const [events, lootTable, legacyCheckpoint] = await Promise.all([
+    const [events, lootTable, legacyCheckpoint, cadence] = await Promise.all([
       getEvents(),
       getLootTable(),
       getLegacyLastSpunAtEventCount(),
+      getWheelCadence(),
     ]);
     // Spins are recorded in the event log itself; the legacy stored counter
     // only matters for installs that last spun before that migration.
     const derived = deriveLastSpunCheckpoint(events);
     const lastSpunAtEventCount = derived > 0 ? derived : legacyCheckpoint;
+    const wheel = deriveWheelStatus(events, lastSpunAtEventCount, cadence);
     const xp = computeXp(events);
     const { level, label } = levelForXp(xp);
     setState({
@@ -120,8 +117,8 @@ export function GamificationPanel() {
       levelLabel: label,
       badges: computeBadges(events),
       // A milestone can't unlock a spin the dial has nothing to land on.
-      wheelUnlocked: shouldUnlockWheel(events, lastSpunAtEventCount) && lootTable.length > 0,
-      applicationsUntilNext: applicationsUntilNextMilestone(events, lastSpunAtEventCount),
+      wheelUnlocked: wheel.unlocked && lootTable.length > 0,
+      applicationsUntilNext: wheel.applicationsUntilNext,
       persistedTreatLabel: lastWonTreatLabel(events),
     });
   }
@@ -137,7 +134,7 @@ export function GamificationPanel() {
     // debounce that's a full recompute per imported row.
     let debounceId: number | null = null;
     function onStorageChanged(changes: { [key: string]: chrome.storage.StorageChange }) {
-      if (!changes.appEvents && !changes.lootTable) return;
+      if (!changes.appEvents && !changes.lootTable && !changes.wheelCadence) return;
       if (debounceId !== null) window.clearTimeout(debounceId);
       debounceId = window.setTimeout(refresh, 300);
     }

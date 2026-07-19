@@ -1,4 +1,4 @@
-import { useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Bubble } from './Bubble';
 import { ReviewPanel } from './ReviewPanel';
 import { safeExtract } from './extract';
@@ -8,6 +8,7 @@ import type { ExtractedJob } from '../capture/adapters';
 import {
   addJobEntry,
   appendEvent,
+  getJobEntries,
   hideBubbleUntilRestart,
   setBubbleHiddenOnDomain,
   setBubbleSettings,
@@ -32,17 +33,44 @@ const EMPTY_DRAFT: ExtractedJob = { company: '', role: '', url: '' };
 /** How long the "Saved to SideQuest" confirmation stays up before the panel auto-closes. */
 const SAVED_AUTO_CLOSE_MS = 1400;
 
-/** Minimum mouse movement (px) before a mousedown-drag counts as a drag rather than a click. */
+/** Minimum pointer movement (px) before a pointerdown-drag counts as a drag rather than a click. */
 const DRAG_THRESHOLD_PX = 4;
 
 interface ContentAppProps {
   /** The fixed-position host element created in index.tsx — mutated directly during drag for smoothness, no React re-render per pixel moved. */
   host: HTMLElement;
+  /** Hidden by BubbleSettings (globally or for this site) at mount time — kept live via storage.onChanged below. */
+  initialSettingsHidden: boolean;
+  /** "Hide until next visit" was active at mount time — final for this page's lifetime. */
+  initialSessionHidden: boolean;
 }
 
-export function ContentApp({ host }: ContentAppProps) {
+export function ContentApp({ host, initialSettingsHidden, initialSessionHidden }: ContentAppProps) {
   const [state, setState] = useState<PanelState>({ phase: 'closed' });
-  const [hidden, setHidden] = useState(false);
+  const [settingsHidden, setSettingsHidden] = useState(initialSettingsHidden);
+  const [sessionHidden, setSessionHidden] = useState(initialSessionHidden);
+
+  // Keep visibility (and dock position) in sync with the Options page —
+  // toggling the bubble there should take effect on already-open tabs
+  // without a reload, in both directions.
+  useEffect(() => {
+    function onStorageChanged(changes: { [key: string]: chrome.storage.StorageChange }) {
+      if (!changes.bubbleSettings) return;
+      const next = changes.bubbleSettings.newValue as
+        | { hiddenGlobally?: boolean; hiddenDomains?: string[]; verticalPercent?: number }
+        | undefined;
+      if (!next) return;
+      const site = getCurrentCaptureSite();
+      setSettingsHidden(
+        Boolean(next.hiddenGlobally) || (site !== null && (next.hiddenDomains ?? []).includes(site))
+      );
+      if (typeof next.verticalPercent === 'number') {
+        host.style.top = `${next.verticalPercent}%`;
+      }
+    }
+    chrome.storage.local.onChanged?.addListener(onStorageChanged);
+    return () => chrome.storage.local.onChanged?.removeListener(onStorageChanged);
+  }, [host]);
 
   // Synchronous re-entry guard, same rationale as Popup.tsx's isSavingRef:
   // React batches/defers setState, so without a ref a fast double-click
@@ -124,7 +152,24 @@ export function ContentApp({ host }: ContentAppProps) {
     }
     trimmed.url = safeUrl;
 
+    // Lock before the first await below, or a fast double-click could get
+    // two saves past the duplicate check concurrently.
     isSavingRef.current = true;
+
+    // Exact-URL duplicate check — adapters canonicalize LinkedIn/Indeed
+    // links, so re-capturing the same posting produces the same string.
+    const existing = (await getJobEntries()).find((entry) => entry.url === trimmed.url);
+    if (existing) {
+      isSavingRef.current = false;
+      setState({
+        phase: 'error',
+        draft: trimmed,
+        statuses: getFieldStatuses(trimmed),
+        source,
+        message: `Already in your tracker — "${existing.role}" at ${existing.company || 'unknown company'}.`,
+      });
+      return;
+    }
     setState({ phase: 'saving', draft: trimmed, statuses: getFieldStatuses(trimmed), source });
 
     try {
@@ -155,13 +200,15 @@ export function ContentApp({ host }: ContentAppProps) {
     }
   }
 
-  function handleDragStart(event: ReactMouseEvent<HTMLButtonElement>) {
-    if (event.button !== 0) return; // left-click/primary pointer only
+  // Pointer events (not mouse events) so the drag works from touch screens
+  // and pens too — mousedown/mousemove never fire for a touch drag.
+  function handleDragStart(event: ReactPointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return; // primary button/contact only
     event.preventDefault();
     const startY = event.clientY;
     let dragging = false;
 
-    function handleMouseMove(moveEvent: MouseEvent) {
+    function handlePointerMove(moveEvent: PointerEvent) {
       if (!dragging && Math.abs(moveEvent.clientY - startY) < DRAG_THRESHOLD_PX) return;
       if (!dragging) {
         dragging = true;
@@ -170,9 +217,14 @@ export function ContentApp({ host }: ContentAppProps) {
       host.style.top = `${percentFromClientY(moveEvent.clientY, window.innerHeight)}%`;
     }
 
-    function handleMouseUp(upEvent: MouseEvent) {
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
+    function stopDragging() {
+      document.removeEventListener('pointermove', handlePointerMove);
+      document.removeEventListener('pointerup', handlePointerUp);
+      document.removeEventListener('pointercancel', handlePointerCancel);
+    }
+
+    function handlePointerUp(upEvent: PointerEvent) {
+      stopDragging();
       if (!dragging) return;
       document.body.style.cursor = '';
       suppressClickRef.current = true;
@@ -181,33 +233,41 @@ export function ContentApp({ host }: ContentAppProps) {
       void setBubbleSettings({ verticalPercent: percent });
     }
 
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
+    function handlePointerCancel() {
+      // Browser took the pointer back (e.g. touch turned into a scroll) —
+      // abandon the drag without persisting a position.
+      stopDragging();
+      if (dragging) document.body.style.cursor = '';
+    }
+
+    document.addEventListener('pointermove', handlePointerMove);
+    document.addEventListener('pointerup', handlePointerUp);
+    document.addEventListener('pointercancel', handlePointerCancel);
   }
 
-  // All three hide actions take effect immediately for this page view
-  // (setHidden(true) unmounts the bubble right now) in addition to
-  // persisting — the persisted setting is what a *future* page load reads
-  // via index.tsx's mount() to decide whether to render the bubble at
-  // all, but the user clicking "hide" shouldn't require a reload to see
-  // it disappear.
+  // All three hide actions take effect immediately for this page view (the
+  // local setState hides the bubble right now) in addition to persisting.
+  // The settings-scoped ones would also arrive via the storage.onChanged
+  // listener above a beat later — the eager local update just avoids that
+  // visible lag; the session-scoped one has no listener and is final for
+  // this page's lifetime.
   function handleHideUntilRestart() {
     void hideBubbleUntilRestart();
-    setHidden(true);
+    setSessionHidden(true);
   }
 
   function handleHideDomain() {
     const site = getCurrentCaptureSite();
     if (site) void setBubbleHiddenOnDomain(site, true);
-    setHidden(true);
+    setSettingsHidden(true);
   }
 
   function handleHideGlobally() {
     void setBubbleSettings({ hiddenGlobally: true });
-    setHidden(true);
+    setSettingsHidden(true);
   }
 
-  if (hidden) return null;
+  if (sessionHidden || settingsHidden) return null;
 
   const isOpen = state.phase !== 'closed';
 

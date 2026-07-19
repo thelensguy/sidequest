@@ -1,11 +1,11 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { ShieldIcon, XIcon } from '../components/icons';
 import { BubbleHideMenu } from './BubbleHideMenu';
 
 interface BubbleProps {
   isOpen: boolean;
   onClick: () => void;
-  onDragStart: (event: ReactMouseEvent<HTMLButtonElement>) => void;
+  onDragStart: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onHideUntilRestart: () => void;
   onHideDomain: () => void;
   onHideGlobally: () => void;
@@ -70,7 +70,7 @@ export function Bubble({
         type="button"
         className={`sq-bubble${isOpen ? ' sq-bubble--open' : ''}`}
         onClick={onClick}
-        onMouseDown={isOpen ? undefined : onDragStart}
+        onPointerDown={isOpen ? undefined : onDragStart}
         aria-label={isOpen ? 'Close SideQuest capture panel' : 'Save this posting with SideQuest'}
         aria-expanded={isOpen}
         data-tip={isOpen ? undefined : 'SideQuest'}
